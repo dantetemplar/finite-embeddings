@@ -39,19 +39,31 @@ class ModelConfig:
 class EmbedRequest(BaseModel):
     dense_model_id: str | None = None
     dense_truncate_dim: int | None = None
+    dense_prompt: str = Field(
+        default="",
+        description="Prefix prepended to each text for SentenceTransformer.encode (`prompt=`). Empty string means no prefix. Only used for dense models.",
+    )
+    dense_task: Literal["query", "document"] | None = Field(
+        default=None,
+        description='SentenceTransformer route: "query" or "document" (encode_query / encode_document); omit for encode().',
+    )
     sparse_model_id: str | None = None
     sparse_max_active_dims: int | None = Field(default=None, gt=0)
     sparse_pruning_ratio: float | None = Field(default=None, gt=0.0, le=1.0)
     bge_model_id: str | None = None
+    sparse_task: Literal["query", "document"] | None = Field(
+        default=None,
+        description='SparseEncoder route: "query" or "document" (encode_query / encode_document); omit for encode().',
+    )
 
     texts: list[str]
 
     def __repr__(self) -> str:
-        return f"EmbedRequest(dense_model_id={self.dense_model_id}, dense_truncate_dim={self.dense_truncate_dim}, sparse_model_id={self.sparse_model_id}, sparse_max_active_dims={self.sparse_max_active_dims}, sparse_pruning_ratio={self.sparse_pruning_ratio}, bge_model_id={self.bge_model_id}, texts={len(self.texts)})"
+        return f"EmbedRequest(dense_model_id={self.dense_model_id}, dense_truncate_dim={self.dense_truncate_dim}, dense_prompt={self.dense_prompt!r}, dense_task={self.dense_task}, sparse_model_id={self.sparse_model_id}, sparse_max_active_dims={self.sparse_max_active_dims}, sparse_pruning_ratio={self.sparse_pruning_ratio}, bge_model_id={self.bge_model_id}, sparse_task={self.sparse_task}, texts={len(self.texts)})"
 
 
 class RerankRequest(BaseModel):
-    reranker_model_id: str | None = None
+    reranker_model_id: str
     query: str | None = None
     queries: list[str] | None = None
     docs: list[str]
@@ -106,6 +118,7 @@ class TimingContext:
 
 
 timing_context = ContextVar[TimingContext]("timing_context", default=None)  # pyright: ignore[reportArgumentType]
+
 
 class EmbedResponse(BaseModel):
     class Dense(BaseModel):
@@ -484,11 +497,14 @@ def build_app(config: ModelConfig) -> FastAPI:
             EmbedRequest,
             Body(
                 example={
-                    "dense_model_id": "sergeyzh/BERTA",
-                    "sparse_model_id": None,
-                    "bge_model_id": None,
                     "texts": ["Привет, мир!"],
-                    "truncate_dim": None,
+                    "dense_model_id": "sergeyzh/BERTA",
+                    "dense_prompt": None,
+                    "dense_task": "query",
+                    "dense_truncate_dim": None,
+                    "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
+                    "sparse_task": "query",
+                    "bge_model_id": "BAAI/bge-m3",
                 }
             ),
         ],
@@ -507,15 +523,31 @@ def build_app(config: ModelConfig) -> FastAPI:
         payload: EmbedResponse = EmbedResponse(texts_count=len(embed_request.texts))
 
         if embed_request.dense_model_id is not None:
-            dense_model = app.state.dense_models.get(embed_request.dense_model_id)
+            dense_model: SentenceTransformer | None = app.state.dense_models.get(embed_request.dense_model_id)
             if dense_model is None:
                 raise HTTPException(status_code=400, detail=f"Dense model not loaded: {embed_request.dense_model_id}")
             timing_context.get().route_dense_embed_start = time.monotonic()
-            dense_vectors = dense_model.encode(
-                embed_request.texts,
-                convert_to_numpy=True,
-                truncate_dim=embed_request.dense_truncate_dim,
-            )
+            if embed_request.dense_task == "query":
+                dense_vectors = dense_model.encode_query(
+                    embed_request.texts,
+                    truncate_dim=embed_request.dense_truncate_dim,
+                    prompt=embed_request.dense_prompt,
+                    convert_to_numpy=True,
+                )
+            elif embed_request.dense_task == "document":
+                dense_vectors = dense_model.encode_document(
+                    embed_request.texts,
+                    truncate_dim=embed_request.dense_truncate_dim,
+                    prompt=embed_request.dense_prompt,
+                    convert_to_numpy=True,
+                )
+            else:
+                dense_vectors = dense_model.encode(
+                    embed_request.texts,
+                    truncate_dim=embed_request.dense_truncate_dim,
+                    prompt=embed_request.dense_prompt,
+                    convert_to_numpy=True,
+                )
             timing_context.get().route_dense_embed_end = time.monotonic()
             dense_vectors = np.asarray(dense_vectors, dtype=np.float32)
             if dense_vectors.ndim == 1:
@@ -531,15 +563,28 @@ def build_app(config: ModelConfig) -> FastAPI:
             timing_context.get().route_dense_payload_end = time.monotonic()
 
         if embed_request.sparse_model_id is not None:
-            sparse_model = app.state.sparse_models.get(embed_request.sparse_model_id)
+            sparse_model: SparseEncoder | None = app.state.sparse_models.get(embed_request.sparse_model_id)
             if sparse_model is None:
                 raise HTTPException(status_code=400, detail=f"Sparse model not loaded: {embed_request.sparse_model_id}")
             timing_context.get().route_sparse_embed_start = time.monotonic()
-            sparse_vectors = sparse_model.encode(
-                embed_request.texts,
-                convert_to_tensor=True,
-                max_active_dims=embed_request.sparse_max_active_dims,
-            )
+            if embed_request.sparse_task == "query":
+                sparse_vectors = sparse_model.encode_query(
+                    embed_request.texts,
+                    max_active_dims=embed_request.sparse_max_active_dims,
+                    convert_to_tensor=True,
+                )
+            elif embed_request.sparse_task == "document":
+                sparse_vectors = sparse_model.encode_document(
+                    embed_request.texts,
+                    max_active_dims=embed_request.sparse_max_active_dims,
+                    convert_to_tensor=True,
+                )
+            else:
+                sparse_vectors = sparse_model.encode(
+                    embed_request.texts,
+                    max_active_dims=embed_request.sparse_max_active_dims,
+                    convert_to_tensor=True,
+                )
             timing_context.get().route_sparse_embed_end = time.monotonic()
             if embed_request.sparse_pruning_ratio:
                 timing_context.get().route_sparse_prune_start = time.monotonic()
@@ -555,9 +600,9 @@ def build_app(config: ModelConfig) -> FastAPI:
                 encoding="base64",
             )
             timing_context.get().route_sparse_payload_end = time.monotonic()
-            
+
         if embed_request.bge_model_id is not None:
-            bge_model = app.state.bge_m3_models.get(embed_request.bge_model_id)
+            bge_model: BGEM3FlagModel | None = app.state.bge_m3_models.get(embed_request.bge_model_id)
             if bge_model is None:
                 raise HTTPException(status_code=400, detail=f"BGE model not loaded: {embed_request.bge_model_id}")
             timing_context.get().route_bge_embed_start = time.monotonic()
@@ -619,12 +664,7 @@ def build_app(config: ModelConfig) -> FastAPI:
             raise HTTPException(status_code=400, detail="Provide non-empty docs.")
 
         model_id = rerank_request.reranker_model_id
-        if model_id is None:
-            if len(app.state.reranker_models) == 1:
-                model_id = next(iter(app.state.reranker_models))
-            else:
-                raise HTTPException(status_code=400, detail="Provide reranker_model_id.")
-        reranker_model = app.state.reranker_models.get(model_id)
+        reranker_model: FlagReranker | None = app.state.reranker_models.get(model_id)
         if reranker_model is None:
             raise HTTPException(status_code=400, detail=f"Reranker model not loaded: {model_id}")
 

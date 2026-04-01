@@ -156,7 +156,7 @@ asyncio.run(main())
 
 ### Client-side LMDB cache
 
-The client can persist **per-text** dense, sparse, and BGE-M3 (dense+sparse+colbert) vectors in LMDB. Keys are derived from model id and request options (`dense_truncate_dim`, `sparse_max_active_dims`, `sparse_pruning_ratio`) where applicable. Enable it with `use_cache=True` and optionally set `cache_path` (default: `~/.cache/finite-embeddings/client-cache.lmdb`) and `cache_map_size` (LMDB map size in bytes, default 2 GiB).
+The client can persist **per-text** dense, sparse, and BGE-M3 (dense+sparse+colbert) vectors in LMDB. Keys are derived from model id and request options (`dense_truncate_dim`, `dense_prompt`, `dense_task`, `sparse_max_active_dims`, `sparse_pruning_ratio`, and `sparse_task` when set) where applicable. Enable it with `use_cache=True` and optionally set `cache_path` (default: `~/.cache/finite-embeddings/client-cache.lmdb`) and `cache_map_size` (LMDB map size in bytes, default 2 GiB).
 
 ```python
 import asyncio
@@ -233,6 +233,7 @@ curl -sS -X POST "http://127.0.0.1:8067/rerank" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -d '{
+    "reranker_model_id": "BAAI/bge-reranker-v2-m3",
     "queries": ["what is panda?", "capital of france"],
     "docs": ["The giant panda is a bear species endemic to China.", "Paris is the capital city of France."]
   }'

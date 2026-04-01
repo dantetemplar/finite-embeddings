@@ -18,15 +18,18 @@ class EmbedRequestDict(TypedDict):
     texts: list[str]
     dense_model_id: NotRequired[str | None]
     dense_truncate_dim: NotRequired[int | None]
+    dense_prompt: NotRequired[str]
+    dense_task: NotRequired[Literal["query", "document"] | None]
     sparse_model_id: NotRequired[str | None]
     sparse_max_active_dims: NotRequired[int | None]
     sparse_pruning_ratio: NotRequired[float | None]
     bge_model_id: NotRequired[str | None]
+    sparse_task: NotRequired[Literal["query", "document"] | None]
 
 
 class RerankRequestDict(TypedDict):
+    reranker_model_id: str
     docs: list[str]
-    reranker_model_id: NotRequired[str | None]
     query: NotRequired[str | None]
     queries: NotRequired[list[str] | None]
 
@@ -227,13 +230,26 @@ class FiniteEmbeddingsClient:
         return self._client
 
     @staticmethod
-    def _dense_cache_key(model_id: str, truncate_dim: int | None, text: str) -> bytes:
+    def _dense_cache_key(
+        model_id: str,
+        truncate_dim: int | None,
+        dense_prompt: str,
+        dense_task: Literal["query", "document"] | None,
+        text: str,
+    ) -> bytes:
         h = hashlib.blake2b(digest_size=32)
         h.update(b"dense\x00")
         h.update(model_id.encode("utf-8"))
         h.update(b"\x00")
         dim = 0 if truncate_dim is None else truncate_dim
         h.update(dim.to_bytes(4, "little", signed=False))
+        h.update(b"\x00")
+        h.update(
+            json.dumps(
+                {"dense_prompt": dense_prompt, "dense_task": dense_task},
+                separators=(",", ":")
+            ).encode("utf-8")
+        )
         h.update(b"\x00")
         h.update(text.encode("utf-8"))
         return h.digest()
@@ -243,13 +259,19 @@ class FiniteEmbeddingsClient:
         model_id: str,
         max_active_dims: int | None,
         pruning_ratio: float | None,
+        sparse_task: Literal["query", "document"] | None,
         text: str,
     ) -> bytes:
         h = hashlib.blake2b(digest_size=32)
         h.update(b"sparse\x00")
         h.update(model_id.encode("utf-8"))
         h.update(b"\x00")
-        h.update(json.dumps({"mad": max_active_dims, "pr": pruning_ratio}, separators=(",", ":")).encode("utf-8"))
+        h.update(
+            json.dumps(
+                {"mad": max_active_dims, "pr": pruning_ratio, "sparse_task": sparse_task},
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
         h.update(b"\x00")
         h.update(text.encode("utf-8"))
         return h.digest()
@@ -411,8 +433,11 @@ class FiniteEmbeddingsClient:
         sparse_model_id = payload.get("sparse_model_id")
         bge_model_id = payload.get("bge_model_id")
         dense_truncate_dim = payload.get("dense_truncate_dim")
+        dense_prompt = payload.get("dense_prompt") or ""
+        dense_task = payload.get("dense_task")
         sparse_max_active_dims = payload.get("sparse_max_active_dims")
         sparse_pruning_ratio = payload.get("sparse_pruning_ratio")
+        sparse_task = payload.get("sparse_task")
         if not texts or (dense_model_id is None and sparse_model_id is None and bge_model_id is None):
             return await self._embed_remote(payload)
 
@@ -440,14 +465,16 @@ class FiniteEmbeddingsClient:
             bge_sparse_hit = True
             bge_colbert_hit = True
             if dense_model_id is not None and dense_vectors is not None:
-                dense_key = self._dense_cache_key(dense_model_id, dense_truncate_dim, text)
+                dense_key = self._dense_cache_key(dense_model_id, dense_truncate_dim, dense_prompt, dense_task, text)
                 cached_dense = self._load_dense_vector(dense_key, dense_truncate_dim)
                 if cached_dense is None:
                     dense_hit = False
                 else:
                     dense_vectors[idx] = cached_dense
             if sparse_model_id is not None and sparse_items is not None:
-                sparse_key = self._sparse_cache_key(sparse_model_id, sparse_max_active_dims, sparse_pruning_ratio, text)
+                sparse_key = self._sparse_cache_key(
+                    sparse_model_id, sparse_max_active_dims, sparse_pruning_ratio, sparse_task, text
+                )
                 cached_sparse = self._load_sparse_item(sparse_key)
                 if cached_sparse is None:
                     sparse_hit = False
@@ -496,14 +523,16 @@ class FiniteEmbeddingsClient:
                         raise ValueError("Dense cache expected dense embeddings in server response.")
                     vector = np.asarray(remote.dense.vectors[miss_row], dtype=np.float32)
                     dense_vectors[idx] = vector
-                    dense_key = self._dense_cache_key(dense_model_id, dense_truncate_dim, text)
+                    dense_key = self._dense_cache_key(dense_model_id, dense_truncate_dim, dense_prompt, dense_task, text)
                     to_store_dense.append((dense_key, vector))
                 if sparse_model_id is not None and sparse_items is not None:
                     if remote.sparse is None:
                         raise ValueError("Sparse cache expected sparse embeddings in server response.")
                     item = remote.sparse.items[miss_row]
                     sparse_items[idx] = item
-                    sparse_key = self._sparse_cache_key(sparse_model_id, sparse_max_active_dims, sparse_pruning_ratio, text)
+                    sparse_key = self._sparse_cache_key(
+                        sparse_model_id, sparse_max_active_dims, sparse_pruning_ratio, sparse_task, text
+                    )
                     to_store_sparse.append((sparse_key, item))
                 if bge_model_id is not None:
                     if remote.bgeM3 is None:
