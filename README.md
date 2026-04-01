@@ -154,6 +154,41 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+### Client-side LMDB cache
+
+The client can persist **per-text** dense, sparse, and BGE-M3 (dense+sparse+colbert) vectors in LMDB. Keys are derived from model id and request options (`dense_truncate_dim`, `sparse_max_active_dims`, `sparse_pruning_ratio`) where applicable. Enable it with `use_cache=True` and optionally set `cache_path` (default: `~/.cache/finite-embeddings/client-cache.lmdb`) and `cache_map_size` (LMDB map size in bytes, default 2 GiB).
+
+```python
+import asyncio
+import tempfile
+from pathlib import Path
+
+import httpx
+
+from finite_embeddings.client import FiniteEmbeddingsClient
+
+
+async def main() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        cache_path = Path(tmp) / "embed-cache.lmdb"
+        async with httpx.AsyncClient(base_url="http://127.0.0.1:8067", timeout=30.0) as http_client:
+            client = FiniteEmbeddingsClient(
+                http_client,
+                use_cache=True,
+                cache_path=cache_path,
+            )
+            payload = {
+                "texts": ["hello world", "cache demo"],
+                "dense_model_id": "sergeyzh/BERTA",
+                "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
+            }
+            await client.embed(payload)  # fills LMDB on miss
+            await client.embed(payload)  # reads from LMDB
+
+
+asyncio.run(main())
+```
+
 ### curl examples
 
 #### Check loaded models

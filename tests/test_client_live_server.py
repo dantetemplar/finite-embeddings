@@ -79,13 +79,12 @@ async def test_client_embed_cache_hit_skips_remote(tmp_path: Path, monkeypatch: 
         assert second.dense is not None
         assert second.sparse is not None
         assert second.dense.vectors.shape == first.dense.vectors.shape
-        expected_cached_dense = first.dense.vectors.astype(np.float16).astype(np.float32)
-        assert np.array_equal(second.dense.vectors, expected_cached_dense)
+        assert np.array_equal(first.dense.vectors, second.dense.vectors)
         assert len(second.sparse.items) == len(first.sparse.items)
         for first_item, second_item in zip(first.sparse.items, second.sparse.items, strict=True):
             assert first_item.dim == second_item.dim
             assert np.array_equal(first_item.indices, second_item.indices)
-            assert np.allclose(first_item.values, second_item.values)
+            assert np.array_equal(first_item.values, second_item.values)
 
 
 @pytest.mark.anyio
@@ -159,3 +158,42 @@ async def test_client_embed_bge_m3_live_server() -> None:
         assert parsed.bgeM3.dense.vectors.shape[0] == 2
         assert len(parsed.bgeM3.sparse.items) == 2
         assert len(parsed.bgeM3.colbert) == 2
+
+
+@pytest.mark.anyio
+async def test_client_embed_bge_m3_cache_hit_skips_remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    bge_model_id = "BAAI/bge-m3"
+    payload: EmbedRequestDict = {
+        "texts": ["cache bge one", "cache bge two"],
+        "bge_model_id": bge_model_id,
+    }
+    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as http_client:
+        client = FiniteEmbeddingsClient(
+            http_client,
+            use_cache=True,
+            cache_path=tmp_path / "client-cache.lmdb",
+        )
+        models = await client.models()
+        available_model_ids = {model["id"] for model in models["models"] if model["type"] == "bgeM3"}
+        if bge_model_id not in available_model_ids:
+            pytest.skip(f"{bge_model_id} is not loaded on server")
+
+        first = await client.embed(payload)
+        assert first.bgeM3 is not None
+
+        async def _fail_if_remote_called(payload_arg: object) -> object:
+            raise AssertionError(f"Expected cache hit, but remote was called with: {payload_arg}")
+
+        monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
+        second = await client.embed(payload)
+        assert second.bgeM3 is not None
+        assert np.array_equal(first.bgeM3.dense.vectors, second.bgeM3.dense.vectors)
+        assert len(first.bgeM3.sparse.items) == len(second.bgeM3.sparse.items)
+        for first_item, second_item in zip(first.bgeM3.sparse.items, second.bgeM3.sparse.items, strict=True):
+            assert first_item.dim == second_item.dim
+            assert np.array_equal(first_item.indices, second_item.indices)
+            assert np.array_equal(first_item.values, second_item.values)
+        assert len(first.bgeM3.colbert) == len(second.bgeM3.colbert)
+        for first_item, second_item in zip(first.bgeM3.colbert, second.bgeM3.colbert, strict=True):
+            assert np.array_equal(first_item, second_item)
