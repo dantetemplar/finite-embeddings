@@ -1,0 +1,49 @@
+[project]
+name = "finite-embeddings"
+version = "0.1.0"
+description = "FastAPI embedding server and async Python client for dense and sparse text embeddings."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+server = [
+    "FlagEmbedding @ git+https://github.com/dantetemplar/fork-FlagEmbedding.git@refs/heads/fix/reranker-transformers-v5-tokenizer-compat",
+    "fastapi>=0.135.2",
+    "numpy>=2.3.3",
+    "pydantic>=2.11.10",
+    "sentence-transformers>=5.3.0",
+    "torch>=2.9.0",
+    "uvicorn>=0.42.0",
+]
+client = [
+    "httpx",
+    "lmdb",
+    "numpy",
+]
+all = [
+    "FlagEmbedding @ git+https://github.com/dantetemplar/fork-FlagEmbedding.git@refs/heads/fix/reranker-transformers-v5-tokenizer-compat",
+    "fastapi>=0.135.2",
+    "numpy>=2.3.3",
+    "pydantic>=2.11.10",
+    "sentence-transformers>=5.3.0",
+    "torch>=2.9.0",
+    "uvicorn>=0.42.0",
+    "httpx>=0.28.1",
+    "lmdb>=1.7.3",
+]
+
+[project.scripts]
+finite-embeddings = "finite_embeddings.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
