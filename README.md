@@ -5,7 +5,7 @@
 
 `finite-embeddings` is an HTTP API for text embeddings.
 
-It can return **dense + sparse embeddings in one request**, with efficient transport:
+It can return **dense + sparse + BGE-M3 (dense, sparse, colbert) in one request**, with efficient transport:
 - vectors are encoded as `base64`
 - request body can be `gzip`-compressed
 - response body can be `gzip`-compressed
@@ -14,10 +14,12 @@ It can return **dense + sparse embeddings in one request**, with efficient trans
 
 There is already [Infinity](https://github.com/michaelfeil/infinity), but this project exists because:
 - sparse embeddings are needed
+- BGE-M3 colbert and sparse embeddings are needed
 - gzip request handling is needed end-to-end
 - one round-trip for dense + sparse is needed
 - patching upstream behavior was too complex
 - newer `sentence-transformers` versions are required
+- caching on client side is needed
 
 ## How to use
 
