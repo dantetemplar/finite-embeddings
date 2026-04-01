@@ -1,6 +1,6 @@
 [project]
 name = "finite-embeddings"
-version = "0.1.0"
+version = "0.1.1"
 description = "FastAPI embedding server and async Python client for dense and sparse text embeddings."
 readme = "README.md"
 requires-python = ">=3.12"
