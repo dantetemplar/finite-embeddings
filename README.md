@@ -156,13 +156,13 @@ asyncio.run(main())
 
 ### curl examples
 
-### Check loaded models
+#### Check loaded models
 
 ```bash
 curl -sS "http://127.0.0.1:8067/models"
 ```
 
-### JSON request (dense + sparse in one call)
+#### JSON request (dense + sparse in one call)
 
 ```bash
 curl -sS -X POST "http://127.0.0.1:8067/embed" \
@@ -178,7 +178,7 @@ curl -sS -X POST "http://127.0.0.1:8067/embed" \
   }'
 ```
 
-### JSON request (rerank: query vs docs)
+#### JSON request (rerank: query vs docs)
 
 ```bash
 curl -sS -X POST "http://127.0.0.1:8067/rerank" \
@@ -191,7 +191,7 @@ curl -sS -X POST "http://127.0.0.1:8067/rerank" \
   }'
 ```
 
-### JSON request (rerank: queries vs docs bulk)
+#### JSON request (rerank: queries vs docs bulk)
 
 ```bash
 curl -sS -X POST "http://127.0.0.1:8067/rerank" \
@@ -203,7 +203,7 @@ curl -sS -X POST "http://127.0.0.1:8067/rerank" \
   }'
 ```
 
-### Gzipped request + gzipped response
+#### Gzipped request + gzipped response
 
 ```bash
 cat <<'JSON' | gzip -c | curl -sS -X POST "http://127.0.0.1:8067/embed" \
@@ -221,7 +221,7 @@ cat <<'JSON' | gzip -c | curl -sS -X POST "http://127.0.0.1:8067/embed" \
 JSON
 ```
 
-### JSON request (BGE-M3 dense+sparse+colbert)
+#### JSON request (BGE-M3 dense+sparse+colbert)
 
 ```bash
 curl -sS -X POST "http://127.0.0.1:8067/embed" \
