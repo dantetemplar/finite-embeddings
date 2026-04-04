@@ -15,7 +15,9 @@ def numpy_info(array: np.ndarray) -> str:
 async def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         cache_path = Path(tmp) / "embed-cache.lmdb"
-        async with httpx.AsyncClient(base_url="http://127.0.0.1:8067", timeout=30.0) as http_client:
+        async with httpx.AsyncClient(
+            base_url="http://127.0.0.1:8067", timeout=30.0
+        ) as http_client:
             client = FiniteEmbeddingsClient(
                 http_client,
                 use_cache=True,
@@ -37,10 +39,14 @@ async def main() -> None:
                 assert np.array_equal(a.indices, b.indices)
                 assert np.array_equal(a.values, b.values)
             print("LMDB cache path:", cache_path)
-            print("dense (from cache on second call):", numpy_info(second.dense.vectors))
+            print(
+                "dense (from cache on second call):", numpy_info(second.dense.vectors)
+            )
 
             bge_model_id = "BAAI/bge-m3"
-            available_bge_ids = {model["id"] for model in models["models"] if model["type"] == "bgeM3"}
+            available_bge_ids = {
+                model["id"] for model in models["models"] if model["type"] == "bgeM3"
+            }
             if bge_model_id in available_bge_ids:
                 bge_payload = {
                     "texts": ["cache bge one", "cache bge two"],
@@ -49,8 +55,13 @@ async def main() -> None:
                 first_bge = await client.embed(bge_payload)
                 second_bge = await client.embed(bge_payload)
                 assert first_bge.bgeM3 is not None and second_bge.bgeM3 is not None
-                assert np.array_equal(first_bge.bgeM3.dense.vectors, second_bge.bgeM3.dense.vectors)
-                print("bge dense (from cache on second call):", numpy_info(second_bge.bgeM3.dense.vectors))
+                assert np.array_equal(
+                    first_bge.bgeM3.dense.vectors, second_bge.bgeM3.dense.vectors
+                )
+                print(
+                    "bge dense (from cache on second call):",
+                    numpy_info(second_bge.bgeM3.dense.vectors),
+                )
 
 
 asyncio.run(main())

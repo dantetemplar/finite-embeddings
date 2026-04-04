@@ -10,9 +10,9 @@ def parse_args() -> argparse.Namespace:
         epilog=(
             "Examples:\n"
             "  finite-embeddings --SentenceTransformer sergeyzh/BERTA --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1\n"
-            "  finite-embeddings --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1 {\"device\":\"cuda\",\"max_active_dims\":256}\n"
-            "  finite-embeddings --FlagReranker BAAI/bge-reranker-v2-m3 {\"use_fp16\":true}\n"
-            "  finite-embeddings --BGEM3FlagModel BAAI/bge-m3 {\"use_fp16\":true}\n"
+            '  finite-embeddings --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1 {"device":"cuda","max_active_dims":256}\n'
+            '  finite-embeddings --FlagReranker BAAI/bge-reranker-v2-m3 {"use_fp16":true}\n'
+            '  finite-embeddings --BGEM3FlagModel BAAI/bge-m3 {"use_fp16":true}\n'
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -47,18 +47,27 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def parse_model_specs(argv: list[str]) -> list[tuple[Literal["dense", "sparse", "reranker", "bgeM3"], str, dict[str, Any]]]:
+def parse_model_specs(
+    argv: list[str],
+) -> list[tuple[Literal["dense", "sparse", "reranker", "bgeM3"], str, dict[str, Any]]]:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--host")
     parser.add_argument("--port")
     parser.add_argument("--reload", action="store_true")
     _, extras = parser.parse_known_args(argv)
 
-    models: list[tuple[Literal["dense", "sparse", "reranker", "bgeM3"], str, dict[str, Any]]] = []
+    models: list[
+        tuple[Literal["dense", "sparse", "reranker", "bgeM3"], str, dict[str, Any]]
+    ] = []
     idx = 0
     while idx < len(extras):
         token = extras[idx]
-        if token in ("--SentenceTransformer", "--SparseEncoder", "--FlagReranker", "--BGEM3FlagModel"):
+        if token in (
+            "--SentenceTransformer",
+            "--SparseEncoder",
+            "--FlagReranker",
+            "--BGEM3FlagModel",
+        ):
             if idx + 1 >= len(extras):
                 raise SystemExit(f"Missing value for {token}.")
             model_id = extras[idx + 1]
@@ -81,9 +90,13 @@ def parse_model_specs(argv: list[str]) -> list[tuple[Literal["dense", "sparse", 
                     try:
                         parsed_kwargs = json.loads(maybe_kwargs)
                     except json.JSONDecodeError as exc:
-                        raise SystemExit(f"Invalid JSON kwargs for {token} model {model_id!r}: {exc}") from exc
+                        raise SystemExit(
+                            f"Invalid JSON kwargs for {token} model {model_id!r}: {exc}"
+                        ) from exc
                     if not isinstance(parsed_kwargs, dict):
-                        raise SystemExit(f"JSON kwargs for {token} model {model_id!r} must decode to an object.")
+                        raise SystemExit(
+                            f"JSON kwargs for {token} model {model_id!r} must decode to an object."
+                        )
                     kwargs = parsed_kwargs
                     next_idx += 1
             models.append((model_type, model_id, kwargs))
@@ -102,8 +115,12 @@ def main() -> None:
 
     model_config = server.ModelConfig(
         models=[
-            server.ModelInstanceConfig(type=model_type, model_id=model_id, kwargs=kwargs)
+            server.ModelInstanceConfig(
+                type=model_type, model_id=model_id, kwargs=kwargs
+            )
             for model_type, model_id, kwargs in model_specs
         ]
     )
-    server.run_server(model_config=model_config, host=args.host, port=args.port, reload=args.reload)
+    server.run_server(
+        model_config=model_config, host=args.host, port=args.port, reload=args.reload
+    )

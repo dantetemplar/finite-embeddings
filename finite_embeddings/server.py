@@ -276,7 +276,9 @@ def prune_sparse_embedding(embeddings: Any, pruning_ratio: float) -> Any:
 
 def serialize_sparse_embeddings(vectors: Any) -> list[EmbedResponse.Sparse.Item]:
     if not isinstance(vectors, torch.Tensor):
-        raise RuntimeError(f"Unsupported sparse embeddings type: {type(vectors)!r}. Expected torch.Tensor.")
+        raise RuntimeError(
+            f"Unsupported sparse embeddings type: {type(vectors)!r}. Expected torch.Tensor."
+        )
 
     tensor = vectors
     if tensor.ndim == 1:
@@ -322,8 +324,12 @@ def serialize_bge_lexical_weights(
     rows = []
     for item in lexical_weights:
         sorted_items = sorted(item.items(), key=lambda kv: int(kv[0]))
-        row_indices = np.asarray([int(index) for index, _ in sorted_items], dtype=np.uint32)
-        row_values = np.asarray([float(value) for _, value in sorted_items], dtype=np.float32)
+        row_indices = np.asarray(
+            [int(index) for index, _ in sorted_items], dtype=np.uint32
+        )
+        row_values = np.asarray(
+            [float(value) for _, value in sorted_items], dtype=np.float32
+        )
         rows.append(
             EmbedResponse.Sparse.Item(
                 dim=dim,
@@ -337,18 +343,24 @@ def serialize_bge_lexical_weights(
     return rows
 
 
-def serialize_bge_colbert_embeddings(vectors: Any) -> list[EmbedResponse.BGEM3.ColbertItem]:
+def serialize_bge_colbert_embeddings(
+    vectors: Any,
+) -> list[EmbedResponse.BGEM3.ColbertItem]:
     if isinstance(vectors, np.ndarray):
         if vectors.ndim == 3:
             array_items = [vectors[i] for i in range(vectors.shape[0])]
         elif vectors.ndim == 2:
             array_items = [vectors]
         else:
-            raise RuntimeError(f"Unsupported bge colbert embeddings ndim: {vectors.ndim}")
+            raise RuntimeError(
+                f"Unsupported bge colbert embeddings ndim: {vectors.ndim}"
+            )
     elif isinstance(vectors, list):
         array_items = vectors
     else:
-        raise RuntimeError(f"Unsupported bge colbert embeddings type: {type(vectors)!r}")
+        raise RuntimeError(
+            f"Unsupported bge colbert embeddings type: {type(vectors)!r}"
+        )
 
     items = []
     for array_item in array_items:
@@ -383,7 +395,9 @@ def build_app(config: ModelConfig) -> FastAPI:
             original_route_handler = super().get_route_handler()
 
             async def custom_route_handler(request: Request) -> Response:
-                context_token = timing_context.set(TimingContext(request_start=time.monotonic()))
+                context_token = timing_context.set(
+                    TimingContext(request_start=time.monotonic())
+                )
 
                 try:
                     request = UngzipRequest(request.scope, request.receive)
@@ -392,13 +406,18 @@ def build_app(config: ModelConfig) -> FastAPI:
                     timing_context.get().route_handler_end = time.monotonic()
                     timing_dict = timing_context.get().as_dict()
                     response.headers["X-Timing-Context"] = timing_dict["pretty"]
-                    response.headers["X-Timing-Context-Raw"] = json.dumps(timing_dict["raw"])
+                    response.headers["X-Timing-Context-Raw"] = json.dumps(
+                        timing_dict["raw"]
+                    )
                     return response
 
                 finally:
                     ctx = timing_context.get()
                     if ctx is not None:
-                        logging.info("Timing context:\n%s", ctx.as_dict()["pretty"].replace("\t", "\n"))
+                        logging.info(
+                            "Timing context:\n%s",
+                            ctx.as_dict()["pretty"].replace("\t", "\n"),
+                        )
                     else:
                         logging.info("No timing context")
                     timing_context.reset(context_token)
@@ -414,13 +433,21 @@ def build_app(config: ModelConfig) -> FastAPI:
 
         for model in config.models:
             if model.type == "dense":
-                app.state.dense_models[model.model_id] = SentenceTransformer(model.model_id, **model.kwargs)
+                app.state.dense_models[model.model_id] = SentenceTransformer(
+                    model.model_id, **model.kwargs
+                )
             elif model.type == "sparse":
-                app.state.sparse_models[model.model_id] = SparseEncoder(model.model_id, **model.kwargs)
+                app.state.sparse_models[model.model_id] = SparseEncoder(
+                    model.model_id, **model.kwargs
+                )
             elif model.type == "reranker":
-                app.state.reranker_models[model.model_id] = FlagReranker(model.model_id, **model.kwargs)
+                app.state.reranker_models[model.model_id] = FlagReranker(
+                    model.model_id, **model.kwargs
+                )
             else:
-                app.state.bge_m3_models[model.model_id] = BGEM3FlagModel(model.model_id, **model.kwargs)
+                app.state.bge_m3_models[model.model_id] = BGEM3FlagModel(
+                    model.model_id, **model.kwargs
+                )
 
         yield
 
@@ -523,9 +550,14 @@ def build_app(config: ModelConfig) -> FastAPI:
         payload: EmbedResponse = EmbedResponse(texts_count=len(embed_request.texts))
 
         if embed_request.dense_model_id is not None:
-            dense_model: SentenceTransformer | None = app.state.dense_models.get(embed_request.dense_model_id)
+            dense_model: SentenceTransformer | None = app.state.dense_models.get(
+                embed_request.dense_model_id
+            )
             if dense_model is None:
-                raise HTTPException(status_code=400, detail=f"Dense model not loaded: {embed_request.dense_model_id}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Dense model not loaded: {embed_request.dense_model_id}",
+                )
             timing_context.get().route_dense_embed_start = time.monotonic()
             if embed_request.dense_task == "query":
                 dense_vectors = dense_model.encode_query(
@@ -563,9 +595,14 @@ def build_app(config: ModelConfig) -> FastAPI:
             timing_context.get().route_dense_payload_end = time.monotonic()
 
         if embed_request.sparse_model_id is not None:
-            sparse_model: SparseEncoder | None = app.state.sparse_models.get(embed_request.sparse_model_id)
+            sparse_model: SparseEncoder | None = app.state.sparse_models.get(
+                embed_request.sparse_model_id
+            )
             if sparse_model is None:
-                raise HTTPException(status_code=400, detail=f"Sparse model not loaded: {embed_request.sparse_model_id}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Sparse model not loaded: {embed_request.sparse_model_id}",
+                )
             timing_context.get().route_sparse_embed_start = time.monotonic()
             if embed_request.sparse_task == "query":
                 sparse_vectors = sparse_model.encode_query(
@@ -602,9 +639,14 @@ def build_app(config: ModelConfig) -> FastAPI:
             timing_context.get().route_sparse_payload_end = time.monotonic()
 
         if embed_request.bge_model_id is not None:
-            bge_model: BGEM3FlagModel | None = app.state.bge_m3_models.get(embed_request.bge_model_id)
+            bge_model: BGEM3FlagModel | None = app.state.bge_m3_models.get(
+                embed_request.bge_model_id
+            )
             if bge_model is None:
-                raise HTTPException(status_code=400, detail=f"BGE model not loaded: {embed_request.bge_model_id}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"BGE model not loaded: {embed_request.bge_model_id}",
+                )
             timing_context.get().route_bge_embed_start = time.monotonic()
             bge_vectors = bge_model.encode(
                 embed_request.texts,
@@ -621,7 +663,9 @@ def build_app(config: ModelConfig) -> FastAPI:
                 bge_vectors["lexical_weights"],
                 dim=int(bge_sparse_dimensions(bge_model) or 0),
             )
-            colbert_items = serialize_bge_colbert_embeddings(bge_vectors["colbert_vecs"])
+            colbert_items = serialize_bge_colbert_embeddings(
+                bge_vectors["colbert_vecs"]
+            )
 
             timing_context.get().route_bge_payload_start = time.monotonic()
             payload.bgeM3 = EmbedResponse.BGEM3(
@@ -651,30 +695,47 @@ def build_app(config: ModelConfig) -> FastAPI:
                 example={
                     "reranker_model_id": "BAAI/bge-reranker-v2-m3",
                     "query": "what is panda?",
-                    "docs": ["hi", "The giant panda is a bear species endemic to China."],
+                    "docs": [
+                        "hi",
+                        "The giant panda is a bear species endemic to China.",
+                    ],
                 }
             ),
         ],
     ) -> RerankResponse:
         if rerank_request.query is None and rerank_request.queries is None:
-            raise HTTPException(status_code=400, detail="Provide either query or queries.")
+            raise HTTPException(
+                status_code=400, detail="Provide either query or queries."
+            )
         if rerank_request.query is not None and rerank_request.queries is not None:
-            raise HTTPException(status_code=400, detail="Provide either query or queries, not both.")
+            raise HTTPException(
+                status_code=400, detail="Provide either query or queries, not both."
+            )
         if len(rerank_request.docs) == 0:
             raise HTTPException(status_code=400, detail="Provide non-empty docs.")
 
         model_id = rerank_request.reranker_model_id
         reranker_model: FlagReranker | None = app.state.reranker_models.get(model_id)
         if reranker_model is None:
-            raise HTTPException(status_code=400, detail=f"Reranker model not loaded: {model_id}")
+            raise HTTPException(
+                status_code=400, detail=f"Reranker model not loaded: {model_id}"
+            )
 
-        queries = [rerank_request.query] if rerank_request.query is not None else rerank_request.queries
+        queries = (
+            [rerank_request.query]
+            if rerank_request.query is not None
+            else rerank_request.queries
+        )
         if queries is None or len(queries) == 0:
-            raise HTTPException(status_code=400, detail="Provide non-empty query or queries.")
+            raise HTTPException(
+                status_code=400, detail="Provide non-empty query or queries."
+            )
 
         pairs = [[query, doc] for query in queries for doc in rerank_request.docs]
         raw_scores = reranker_model.compute_score(pairs, normalize=False)
-        scores_array = np.asarray(raw_scores, dtype=np.float32).reshape(len(queries), len(rerank_request.docs))
+        scores_array = np.asarray(raw_scores, dtype=np.float32).reshape(
+            len(queries), len(rerank_request.docs)
+        )
         scores = [[float(value) for value in row] for row in scores_array.tolist()]
         return RerankResponse(
             model_id=model_id,

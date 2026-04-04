@@ -11,7 +11,9 @@ def numpy_info(array: np.ndarray) -> str:
 
 
 async def main() -> None:
-    async with httpx.AsyncClient(base_url="http://127.0.0.1:8067", timeout=30.0) as http_client:
+    async with httpx.AsyncClient(
+        base_url="http://127.0.0.1:8067", timeout=30.0
+    ) as http_client:
         client = FiniteEmbeddingsClient(http_client)
         models = await client.models()
         print(models)
@@ -63,14 +65,17 @@ async def main() -> None:
             #     .[0].indices: [ndarray] shape=(226,), dtype=uint32
             #     .[0].values: [ndarray] shape=(226,), dtype=float32
 
-
         if result.bgeM3 is not None:
             print("bgeM3")
             print(f"    .model_id: {result.bgeM3.model_id}")
             print(f"    .dense.vectors: {numpy_info(result.bgeM3.dense.vectors)}")
             print(f"    .sparse.items: total {len(result.bgeM3.sparse.items)} items")
-            print(f"        .[0].indices: {numpy_info(result.bgeM3.sparse.items[0].indices)}")
-            print(f"        .[0].values: {numpy_info(result.bgeM3.sparse.items[0].values)}")
+            print(
+                f"        .[0].indices: {numpy_info(result.bgeM3.sparse.items[0].indices)}"
+            )
+            print(
+                f"        .[0].values: {numpy_info(result.bgeM3.sparse.items[0].values)}"
+            )
             print(f"    .colbert: total {len(result.bgeM3.colbert)} items")
             print(f"        .[0]: {numpy_info(result.bgeM3.colbert[0])}")
             # bgeM3
@@ -81,5 +86,6 @@ async def main() -> None:
             #     .[0].values: [ndarray] shape=(3,), dtype=float32
             # .colbert: total 2 items
             #     .[0]: [ndarray] shape=(4, 1024), dtype=float32
+
 
 asyncio.run(main())
