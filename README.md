@@ -29,6 +29,9 @@ Install with server extras from git:
 
 ```bash
 uv tool install "git+https://github.com/dantetemplar/finite-embeddings.git[server]"
+
+# if you don't have git installed you can use the zip file
+uv tool install "https://github.com/dantetemplar/finite-embeddings/archive/refs/heads/main.zip#egg=finite-embeddings[server]"
 ```
 
 Run server and load models:
@@ -50,6 +53,9 @@ Install client extras from git:
 
 ```bash
 uv add "git+https://github.com/dantetemplar/finite-embeddings.git[client]"
+
+# if you don't have git installed you can use the zip file
+uv add "https://github.com/dantetemplar/finite-embeddings/archive/refs/heads/main.zip#egg=finite-embeddings[client]"
 ```
 
 Example:
