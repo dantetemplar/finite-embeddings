@@ -162,7 +162,7 @@ asyncio.run(main())
 
 ### Client-side LMDB cache
 
-The client can persist **per-text** dense, sparse, and BGE-M3 (dense+sparse+colbert) vectors in LMDB. Keys are derived from model id and request options (`dense_truncate_dim`, `dense_prompt`, `dense_task`, `sparse_max_active_dims`, `sparse_pruning_ratio`, and `sparse_task` when set) where applicable. Enable it with `use_cache=True` and optionally set `cache_path` (default: `~/.cache/finite-embeddings/client-cache.lmdb`) and `cache_map_size` (LMDB map size in bytes, default 2 GiB).
+Enable with `use_cache=True`. Embeddings are keyed per text and model options. Set `cache_path` to an LMDB directory (default `~/.cache/finite-embeddings/client-cache.lmdb`); optional `cache_map_size` sets the map size in bytes (default 2 GiB).
 
 ```python
 import asyncio

@@ -244,16 +244,16 @@ class FiniteEmbeddingsClient:
         self._use_cache = use_cache
         self._cache: lmdb.Environment | None = None
         if self._use_cache:
-            cache_file = (
-                Path(cache_path)
+            cache_dir = (
+                Path(cache_path).expanduser()
                 if cache_path is not None
                 else Path.home() / ".cache" / "finite-embeddings" / "client-cache.lmdb"
             )
-            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            cache_dir.mkdir(parents=True, exist_ok=True)
             self._cache = lmdb.open(
-                str(cache_file),
+                str(cache_dir),
                 map_size=cache_map_size,
-                subdir=False,
+                subdir=True,
                 lock=True,
                 readonly=False,
                 readahead=True,
