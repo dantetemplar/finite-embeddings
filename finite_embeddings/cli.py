@@ -1,24 +1,25 @@
 import argparse
+import importlib
 import json
+import os
 import sys
 from typing import Any, Literal
+
+MODEL_CONFIG_ENV = "FINITE_EMBEDDINGS_MODEL_CONFIG_JSON"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run FastAPI and load dense/sparse models on startup.",
+        description="Run FastAPI and load dense/sparse models on startup. You could pass any uvicorn arguments to the command.",
         epilog=(
             "Examples:\n"
-            "  finite-embeddings --SentenceTransformer sergeyzh/BERTA --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1\n"
+            "  finite-embeddings --SentenceTransformer sergeyzh/BERTA --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1 --host 0.0.0.0 --port 8067\n"
             '  finite-embeddings --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1 {"device":"cuda","max_active_dims":256}\n'
             '  finite-embeddings --FlagReranker BAAI/bge-reranker-v2-m3 {"use_fp16":true}\n'
             '  finite-embeddings --BGEM3FlagModel BAAI/bge-m3 {"use_fp16":true}\n'
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8067)
-    parser.add_argument("--reload", action="store_true")
     parser.add_argument(
         "--SentenceTransformer",
         metavar="MODEL_ID [JSON_KWARGS]",
@@ -49,28 +50,26 @@ def parse_args() -> argparse.Namespace:
 
 def parse_model_specs(
     argv: list[str],
-) -> list[tuple[Literal["dense", "sparse", "reranker", "bgeM3"], str, dict[str, Any]]]:
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--host")
-    parser.add_argument("--port")
-    parser.add_argument("--reload", action="store_true")
-    _, extras = parser.parse_known_args(argv)
-
+) -> tuple[
+    list[tuple[Literal["dense", "sparse", "reranker", "bgeM3"], str, dict[str, Any]]],
+    list[str],
+]:
     models: list[
         tuple[Literal["dense", "sparse", "reranker", "bgeM3"], str, dict[str, Any]]
     ] = []
+    passthrough: list[str] = []
     idx = 0
-    while idx < len(extras):
-        token = extras[idx]
+    while idx < len(argv):
+        token = argv[idx]
         if token in (
             "--SentenceTransformer",
             "--SparseEncoder",
             "--FlagReranker",
             "--BGEM3FlagModel",
         ):
-            if idx + 1 >= len(extras):
+            if idx + 1 >= len(argv):
                 raise SystemExit(f"Missing value for {token}.")
-            model_id = extras[idx + 1]
+            model_id = argv[idx + 1]
             if model_id.startswith("--"):
                 raise SystemExit(f"Missing value for {token}.")
             model_type: Literal["dense", "sparse", "reranker", "bgeM3"]
@@ -84,8 +83,8 @@ def parse_model_specs(
                 model_type = "bgeM3"
             kwargs: dict[str, Any] = {}
             next_idx = idx + 2
-            if next_idx < len(extras):
-                maybe_kwargs = extras[next_idx]
+            if next_idx < len(argv):
+                maybe_kwargs = argv[next_idx]
                 if not maybe_kwargs.startswith("--"):
                     try:
                         parsed_kwargs = json.loads(maybe_kwargs)
@@ -102,25 +101,75 @@ def parse_model_specs(
             models.append((model_type, model_id, kwargs))
             idx = next_idx
             continue
-        raise SystemExit(f"Unknown argument: {token}")
-    return models
+        passthrough.append(token)
+        idx += 1
+    return models, passthrough
 
 
-def main() -> None:
-    args = parse_args()
-    model_specs = parse_model_specs(sys.argv[1:])
+def _has_option(argv: list[str], option: str) -> bool:
+    prefix = f"{option}="
+    return any(item == option or item.startswith(prefix) for item in argv)
 
-    # Lazy import: avoid loading server stack on `--help`.
-    from finite_embeddings import server
 
-    model_config = server.ModelConfig(
-        models=[
-            server.ModelInstanceConfig(
-                type=model_type, model_id=model_id, kwargs=kwargs
-            )
+def _serialize_model_specs(
+    model_specs: list[
+        tuple[Literal["dense", "sparse", "reranker", "bgeM3"], str, dict[str, Any]]
+    ],
+) -> str:
+    return json.dumps(
+        [
+            {"type": model_type, "model_id": model_id, "kwargs": kwargs}
             for model_type, model_id, kwargs in model_specs
         ]
     )
-    server.run_server(
-        model_config=model_config, host=args.host, port=args.port, reload=args.reload
-    )
+
+
+def _load_model_config_from_env() -> Any:
+    from finite_embeddings import server
+
+    raw = os.environ.get(MODEL_CONFIG_ENV)
+    if not raw:
+        raise RuntimeError(f"Missing required env var: {MODEL_CONFIG_ENV}")
+    items = json.loads(raw)
+    if not isinstance(items, list):
+        raise RuntimeError(f"Invalid {MODEL_CONFIG_ENV}: expected JSON array.")
+    models: list[server.ModelInstanceConfig] = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise RuntimeError(f"Invalid {MODEL_CONFIG_ENV}: item must be object.")
+        model_type = item.get("type")
+        model_id = item.get("model_id")
+        kwargs = item.get("kwargs")
+        if model_type not in ("dense", "sparse", "reranker", "bgeM3"):
+            raise RuntimeError(f"Invalid model type in {MODEL_CONFIG_ENV}: {model_type!r}")
+        if not isinstance(model_id, str):
+            raise RuntimeError(f"Invalid model_id in {MODEL_CONFIG_ENV}: {model_id!r}")
+        if not isinstance(kwargs, dict):
+            raise RuntimeError(f"Invalid kwargs in {MODEL_CONFIG_ENV}: {kwargs!r}")
+        models.append(
+            server.ModelInstanceConfig(type=model_type, model_id=model_id, kwargs=kwargs)
+        )
+    return server.ModelConfig(models=models)
+
+
+def uvicorn_app_factory() -> Any:
+    from finite_embeddings import server
+
+    return server.build_app(_load_model_config_from_env())
+
+
+def main() -> None:
+    parse_args()
+    model_specs, passthrough = parse_model_specs(sys.argv[1:])
+    os.environ[MODEL_CONFIG_ENV] = _serialize_model_specs(model_specs)
+
+    uvicorn_args = ["finite_embeddings.cli:uvicorn_app_factory", "--factory"]
+    if not _has_option(passthrough, "--host"):
+        uvicorn_args.extend(["--host", "0.0.0.0"])
+    if not _has_option(passthrough, "--port"):
+        uvicorn_args.extend(["--port", "8067"])
+    uvicorn_args.extend(passthrough)
+
+    uvicorn_main = importlib.import_module("uvicorn.main").main
+
+    uvicorn_main(args=uvicorn_args, prog_name="uvicorn", standalone_mode=True)

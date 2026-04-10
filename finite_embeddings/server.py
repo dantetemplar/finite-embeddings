@@ -746,7 +746,15 @@ def build_app(config: ModelConfig) -> FastAPI:
     return app
 
 
-def run_server(model_config: ModelConfig, host: str, port: int, reload: bool) -> None:
+def run_server(
+    model_config: ModelConfig,
+    host: str = "127.0.0.1",
+    port: int = 8067,
+    reload: bool = False,
+    **uvicorn_kwargs: Any,
+) -> None:
     logging.basicConfig(level=logging.INFO)
     app = build_app(model_config)
-    uvicorn.run(app, host=host, port=port, reload=reload)
+    uvicorn.run(
+        app, host=host, port=port, reload=reload, **uvicorn_kwargs
+    )

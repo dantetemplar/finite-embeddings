@@ -47,6 +47,22 @@ finite-embeddings \
 
 ...wait until server is ready (Uvicorn running on http://0.0.0.0:8067)...
 
+`finite-embeddings` handles only model flags (`--SentenceTransformer`, `--SparseEncoder`, `--FlagReranker`, `--BGEM3FlagModel`).
+All other flags are passed directly to Uvicorn CLI parsing.
+
+Defaults (if not provided): `--host 0.0.0.0 --port 8067`.
+
+Example with extra Uvicorn options:
+
+```bash
+finite-embeddings \
+  --SentenceTransformer "sergeyzh/BERTA" \
+  --reload \
+  --log-level debug \
+  --proxy-headers \
+  --forwarded-allow-ips="*"
+```
+
 ### 2) Use Python client
 
 Install client extras from git:
@@ -273,4 +289,13 @@ curl -sS -X POST "http://127.0.0.1:8067/embed" \
     "bge_model_id": "BAAI/bge-m3",
     "texts": ["What is BGE M3?", "Definition of BM25"]
   }'
+```
+
+
+## Development
+
+Install as editable package:
+
+```bash
+uv pip install -e ".[all]" --extra-index-url https://download.pytorch.org/whl/cu126
 ```
