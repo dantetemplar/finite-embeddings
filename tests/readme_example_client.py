@@ -10,9 +10,9 @@ def numpy_info(array: np.ndarray) -> str:
 
 client = FiniteEmbeddingsClient(
     client=httpx.Client(base_url="http://127.0.0.1:8067"),
-    aclient=httpx.AsyncClient(base_url="http://127.0.0.1:8067"),  # NOTE: async version
+    aclient=httpx.AsyncClient(base_url="http://127.0.0.1:8067"), # NOTE: async version
 )
-models = client.models()  # NOTE: async version is await client.amodels()
+models = client.models() # NOTE: async version is await client.amodels()
 print(models)
 # { 'models': [
 #   {
@@ -40,8 +40,10 @@ result = client.embed(
         "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
         "bge_model_id": "BAAI/bge-m3",
     }
-)  # NOTE: async version is await client.aembed(...)
+) # NOTE: async version is await client.aembed(...)
+print("======== embed ========")
 print(f"texts_count: {result.texts_count}")
+
 print("dense")
 print(f"    .model_id: {result.dense.model_id}")
 print(f"    .vectors: {numpy_info(result.dense.vectors)}")
@@ -76,3 +78,44 @@ print(f"        .[0]: {numpy_info(result.bgeM3.colbert[0])}")
 #     .[0].values: [ndarray] shape=(3,), dtype=float32
 # .colbert: total 2 items
 #     .[0]: [ndarray] shape=(4, 1024), dtype=float32
+
+
+# Single text: use embed_one / aembed_one for a 1D dense vector (no .vectors[0]).
+one = client.embed_one(
+    {
+        "text": "hello world",
+        "dense_model_id": "sergeyzh/BERTA",
+        "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
+        "bge_model_id": "BAAI/bge-m3",
+    }
+) # NOTE: async version is await client.aembed_one(...)
+assert one.dense.vector.shape == (768,)
+print("======== embed one ========")
+print("dense")
+print(f"    .model_id: {one.dense.model_id}")
+print(f"    .vectors: {numpy_info(one.dense.vector)}")
+# dense
+#     .model_id: sergeyzh/BERTA
+#     .vectors: [ndarray] shape=(768,), dtype=float32
+
+print("sparse")
+print(f"    .model_id: {one.sparse.model_id}")
+print(f"    .item.indices: {numpy_info(one.sparse.item.indices)}")
+print(f"    .item.values: {numpy_info(one.sparse.item.values)}")
+# sparse
+#     .model_id: opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1
+#     .item.indices: [ndarray] shape=(226,), dtype=uint32
+#     .item.values: [ndarray] shape=(226,), dtype=float32
+
+print("bgeM3")
+print(f"    .model_id: {one.bgeM3.model_id}")
+print(f"    .dense.vector: {numpy_info(one.bgeM3.dense.vector)}")
+print(f"    .sparse.item.indices: {numpy_info(one.bgeM3.sparse.item.indices)}")
+print(f"    .sparse.item.values: {numpy_info(one.bgeM3.sparse.item.values)}")
+print(f"    .colbert: {numpy_info(one.bgeM3.colbert)}")
+# bgeM3
+#     .model_id: BAAI/bge-m3
+#     .dense.vector: [ndarray] shape=(1024,), dtype=float32
+#     .sparse.item.indices: [ndarray] shape=(3,), dtype=uint32
+#     .sparse.item.values: [ndarray] shape=(3,), dtype=float32
+#     .colbert: [ndarray] shape=(4, 1024), dtype=float32
