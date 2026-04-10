@@ -10,14 +10,26 @@ import pytest
 
 from finite_embeddings.client import (
     BGEM3Embeddings,
+    BGEM3EmbedOneRequestDict,
     BGEM3EmbedRequestDict,
+    DenseBGEM3EmbedOneRequestDict,
     DenseBGEM3EmbedRequestDict,
+    DenseEmbedOneRequestDict,
     DenseEmbeddings,
     DenseEmbedRequestDict,
+    DenseSparseBGEM3EmbedOneRequestDict,
     DenseSparseBGEM3EmbedRequestDict,
+    DenseSparseEmbedOneRequestDict,
     DenseSparseEmbedRequestDict,
     EmbedRequestAny,
     FiniteEmbeddingsClient,
+    ParsedEmbedOneBGEM3,
+    ParsedEmbedOneDense,
+    ParsedEmbedOneDenseBGEM3,
+    ParsedEmbedOneDenseSparse,
+    ParsedEmbedOneDenseSparseBGEM3,
+    ParsedEmbedOneSparse,
+    ParsedEmbedOneSparseBGEM3,
     ParsedEmbedResponseBGEM3,
     ParsedEmbedResponseDense,
     ParsedEmbedResponseDenseBGEM3,
@@ -26,7 +38,9 @@ from finite_embeddings.client import (
     ParsedEmbedResponseSparse,
     ParsedEmbedResponseSparseBGEM3,
     ParsedEmbedResponseVariant,
+    SparseBGEM3EmbedOneRequestDict,
     SparseBGEM3EmbedRequestDict,
+    SparseEmbedOneRequestDict,
     SparseEmbedding,
     SparseEmbeddings,
     SparseEmbedRequestDict,
@@ -214,6 +228,101 @@ def test_embed_all_sync_types() -> None:
     assert_type(r, ParsedEmbedResponseDenseSparseBGEM3)
 
 
+def test_embed_one_dense_sync_types() -> None:
+    client = _sync_harness()
+    payload: DenseEmbedOneRequestDict = {"text": "a", "dense_model_id": "d"}
+    r = client.embed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneDense)
+    assert r.dense.vector.shape == (2,)
+
+    with pytest.raises(AttributeError):
+        _ = r.sparse  # E: "ParsedEmbedOneDense" has no attribute "sparse"
+    with pytest.raises(AttributeError):
+        _ = r.bgeM3  # E: "ParsedEmbedOneDense" has no attribute "bgeM3"
+
+
+def test_embed_one_sparse_sync_types() -> None:
+    client = _sync_harness()
+    payload: SparseEmbedOneRequestDict = {"text": "a", "sparse_model_id": "s"}
+    r = client.embed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneSparse)
+    assert r.sparse.item.dim == 4
+
+    with pytest.raises(AttributeError):
+        _ = r.dense  # E: "ParsedEmbedOneSparse" has no attribute "dense"
+    with pytest.raises(AttributeError):
+        _ = r.bgeM3  # E: "ParsedEmbedOneSparse" has no attribute "bgeM3"
+
+
+def test_embed_one_bge_sync_types() -> None:
+    client = _sync_harness()
+    payload: BGEM3EmbedOneRequestDict = {"text": "a", "bge_model_id": "b"}
+    r = client.embed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneBGEM3)
+    assert r.bgeM3.colbert.shape == (2, 2)
+
+    with pytest.raises(AttributeError):
+        _ = r.dense  # E: "ParsedEmbedOneBGEM3" has no attribute "dense"
+    with pytest.raises(AttributeError):
+        _ = r.sparse  # E: "ParsedEmbedOneBGEM3" has no attribute "sparse"
+
+
+def test_embed_one_dense_sparse_sync_types() -> None:
+    client = _sync_harness()
+    payload: DenseSparseEmbedOneRequestDict = {
+        "text": "a",
+        "dense_model_id": "d",
+        "sparse_model_id": "s",
+    }
+    r = client.embed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneDenseSparse)
+    assert r.dense.model_id == "d"
+    assert r.sparse.model_id == "s"
+
+    with pytest.raises(AttributeError):
+        _ = r.bgeM3  # E: "ParsedEmbedOneDenseSparse" has no attribute "bgeM3"
+
+
+def test_embed_one_dense_bge_sync_types() -> None:
+    client = _sync_harness()
+    payload: DenseBGEM3EmbedOneRequestDict = {
+        "text": "a",
+        "dense_model_id": "d",
+        "bge_model_id": "b",
+    }
+    r = client.embed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneDenseBGEM3)
+
+    with pytest.raises(AttributeError):
+        _ = r.sparse  # E: "ParsedEmbedOneDenseBGEM3" has no attribute "sparse"
+
+
+def test_embed_one_sparse_bge_sync_types() -> None:
+    client = _sync_harness()
+    payload: SparseBGEM3EmbedOneRequestDict = {
+        "text": "a",
+        "sparse_model_id": "s",
+        "bge_model_id": "b",
+    }
+    r = client.embed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneSparseBGEM3)
+
+    with pytest.raises(AttributeError):
+        _ = r.dense  # E: "ParsedEmbedOneSparseBGEM3" has no attribute "dense"
+
+
+def test_embed_one_all_sync_types() -> None:
+    client = _sync_harness()
+    payload: DenseSparseBGEM3EmbedOneRequestDict = {
+        "text": "a",
+        "dense_model_id": "d",
+        "sparse_model_id": "s",
+        "bge_model_id": "b",
+    }
+    r = client.embed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneDenseSparseBGEM3)
+
+
 @pytest.mark.anyio
 async def test_aembed_dense_types() -> None:
     client = _async_harness()
@@ -240,6 +349,47 @@ async def test_aembed_dense_sparse_types() -> None:
 
     with pytest.raises(AttributeError):
         _ = r.bgeM3  # E: "ParsedEmbedResponseDenseSparse" has no attribute "bgeM3"
+
+
+@pytest.mark.anyio
+async def test_aembed_one_dense_types() -> None:
+    client = _async_harness()
+    payload: DenseEmbedOneRequestDict = {"text": "a", "dense_model_id": "d"}
+    r = await client.aembed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneDense)
+
+    with pytest.raises(AttributeError):
+        _ = r.sparse  # E: "ParsedEmbedOneDense" has no attribute "sparse"
+    with pytest.raises(AttributeError):
+        _ = r.bgeM3  # E: "ParsedEmbedOneDense" has no attribute "bgeM3"
+
+
+@pytest.mark.anyio
+async def test_aembed_one_dense_sparse_types() -> None:
+    client = _async_harness()
+    payload: DenseSparseEmbedOneRequestDict = {
+        "text": "a",
+        "dense_model_id": "d",
+        "sparse_model_id": "s",
+    }
+    r = await client.aembed_one(payload, use_cache=False)
+    assert_type(r, ParsedEmbedOneDenseSparse)
+
+    with pytest.raises(AttributeError):
+        _ = r.bgeM3  # E: "ParsedEmbedOneDenseSparse" has no attribute "bgeM3"
+
+
+def test_embed_one_raises_when_text_missing() -> None:
+    client = _sync_harness()
+    with pytest.raises(ValueError, match="text must be provided"):
+        client.embed_one(cast(Any, {"dense_model_id": "d"}), use_cache=False)
+
+
+@pytest.mark.anyio
+async def test_aembed_one_raises_when_text_missing() -> None:
+    client = _async_harness()
+    with pytest.raises(ValueError, match="text must be provided"):
+        await client.aembed_one(cast(Any, {"dense_model_id": "d"}), use_cache=False)
 
 
 def test_client_requires_http_client() -> None:

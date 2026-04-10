@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from finite_embeddings.client import (
     EmbedRequestPayload,
     FiniteEmbeddingsClient,
+    ParsedEmbedOneDenseSparse,
     ParsedEmbedResponseBGEM3,
     ParsedEmbedResponseDenseSparse,
 )
@@ -54,6 +55,34 @@ async def test_client_models_and_embed_live_server() -> None:
         assert result.sparse.model_id == sparse_model_id
         assert len(result.sparse.items) == 2
         assert result.sparse.items[0].indices.size == result.sparse.items[0].values.size
+
+
+@pytest.mark.anyio
+async def test_client_aembed_one_live_server() -> None:
+    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
+        client = FiniteEmbeddingsClient(aclient=httpx_aclient)
+
+        models = await client.amodels()
+        available_model_ids = {model["id"] for model in models["models"]}
+        dense_model_id = "sergeyzh/BERTA"
+        sparse_model_id = (
+            "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1"
+        )
+
+        assert dense_model_id in available_model_ids
+        assert sparse_model_id in available_model_ids
+
+        one = await client.aembed_one(
+            {
+                "text": "single string embed_one",
+                "dense_model_id": dense_model_id,
+                "sparse_model_id": sparse_model_id,
+            }
+        )
+        assert isinstance(one, ParsedEmbedOneDenseSparse)
+        assert one.dense.vector.ndim == 1
+        assert one.sparse.item.indices.size == one.sparse.item.values.size
 
 
 @pytest.mark.anyio

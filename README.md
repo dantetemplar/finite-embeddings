@@ -121,6 +121,16 @@ result = client.embed(
     }
 ) # NOTE: async version is await client.aembed(...)
 print(f"texts_count: {result.texts_count}")
+
+# Single text: use embed_one / aembed_one for a 1D dense vector (no .vectors[0]).
+one = client.embed_one(
+    {
+        "text": "hello world",
+        "dense_model_id": "sergeyzh/BERTA",
+        "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
+    }
+)
+assert one.dense.vector.shape == (768,)
 print("dense")
 print(f"    .model_id: {result.dense.model_id}")
 print(f"    .vectors: {numpy_info(result.dense.vectors)}")

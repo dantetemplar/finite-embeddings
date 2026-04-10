@@ -14,9 +14,9 @@ import lmdb
 import numpy as np
 import numpy.typing as npt
 
-Float32Array = npt.NDArray[np.float32]
-Float16Array = npt.NDArray[np.float16]
-UInt32Array = npt.NDArray[np.uint32]
+type Float32Array = npt.NDArray[np.float32]
+type Float16Array = npt.NDArray[np.float16]
+type UInt32Array = npt.NDArray[np.uint32]
 
 
 class EmbedRequestCommonDict(TypedDict):
@@ -88,6 +88,77 @@ EmbedRequestPayload = (
 )
 
 EmbedRequestAny = EmbedRequestPayload | _EmbedRequestImplDict
+
+
+class EmbedOneRequestCommonDict(TypedDict):
+    text: str
+    dense_truncate_dim: NotRequired[int | None]
+    dense_prompt: NotRequired[str]
+    dense_task: NotRequired[Literal["query", "document"] | None]
+    sparse_max_active_dims: NotRequired[int | None]
+    sparse_pruning_ratio: NotRequired[float | None]
+    sparse_task: NotRequired[Literal["query", "document"] | None]
+
+
+class DenseEmbedOneRequestDict(EmbedOneRequestCommonDict):
+    dense_model_id: Required[str]
+    sparse_model_id: NotRequired[None]
+    bge_model_id: NotRequired[None]
+
+
+class SparseEmbedOneRequestDict(EmbedOneRequestCommonDict):
+    dense_model_id: NotRequired[None]
+    sparse_model_id: Required[str]
+    bge_model_id: NotRequired[None]
+
+
+class BGEM3EmbedOneRequestDict(EmbedOneRequestCommonDict):
+    dense_model_id: NotRequired[None]
+    sparse_model_id: NotRequired[None]
+    bge_model_id: Required[str]
+
+
+class DenseSparseEmbedOneRequestDict(EmbedOneRequestCommonDict):
+    dense_model_id: Required[str]
+    sparse_model_id: Required[str]
+    bge_model_id: NotRequired[None]
+
+
+class DenseBGEM3EmbedOneRequestDict(EmbedOneRequestCommonDict):
+    dense_model_id: Required[str]
+    sparse_model_id: NotRequired[None]
+    bge_model_id: Required[str]
+
+
+class SparseBGEM3EmbedOneRequestDict(EmbedOneRequestCommonDict):
+    dense_model_id: NotRequired[None]
+    sparse_model_id: Required[str]
+    bge_model_id: Required[str]
+
+
+class DenseSparseBGEM3EmbedOneRequestDict(EmbedOneRequestCommonDict):
+    dense_model_id: Required[str]
+    sparse_model_id: Required[str]
+    bge_model_id: Required[str]
+
+
+class _EmbedOneRequestImplDict(EmbedOneRequestCommonDict):
+    dense_model_id: NotRequired[str | None]
+    sparse_model_id: NotRequired[str | None]
+    bge_model_id: NotRequired[str | None]
+
+
+EmbedOneRequestPayload = (
+    DenseEmbedOneRequestDict
+    | SparseEmbedOneRequestDict
+    | BGEM3EmbedOneRequestDict
+    | DenseSparseEmbedOneRequestDict
+    | DenseBGEM3EmbedOneRequestDict
+    | SparseBGEM3EmbedOneRequestDict
+    | DenseSparseBGEM3EmbedOneRequestDict
+)
+
+EmbedOneRequestAny = EmbedOneRequestPayload | _EmbedOneRequestImplDict
 
 
 class RerankRequestDict(TypedDict):
@@ -242,6 +313,77 @@ ParsedEmbedResponseVariant = (
     | ParsedEmbedResponseDenseBGEM3
     | ParsedEmbedResponseSparseBGEM3
     | ParsedEmbedResponseDenseSparseBGEM3
+)
+
+
+@dataclass(slots=True)
+class DenseEmbeddingVector:
+    model_id: str
+    vector: Float32Array
+
+
+@dataclass(slots=True)
+class SparseEmbeddingsOne:
+    model_id: str
+    item: SparseEmbedding
+
+
+@dataclass(slots=True)
+class BGEM3EmbeddingOne:
+    model_id: str
+    dense: DenseEmbeddingVector
+    sparse: SparseEmbeddingsOne
+    colbert: Float32Array
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedOneDense:
+    dense: DenseEmbeddingVector
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedOneSparse:
+    sparse: SparseEmbeddingsOne
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedOneBGEM3:
+    bgeM3: BGEM3EmbeddingOne
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedOneDenseSparse:
+    dense: DenseEmbeddingVector
+    sparse: SparseEmbeddingsOne
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedOneDenseBGEM3:
+    dense: DenseEmbeddingVector
+    bgeM3: BGEM3EmbeddingOne
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedOneSparseBGEM3:
+    sparse: SparseEmbeddingsOne
+    bgeM3: BGEM3EmbeddingOne
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedOneDenseSparseBGEM3:
+    dense: DenseEmbeddingVector
+    sparse: SparseEmbeddingsOne
+    bgeM3: BGEM3EmbeddingOne
+
+
+ParsedEmbedOneVariant = (
+    ParsedEmbedOneDense
+    | ParsedEmbedOneSparse
+    | ParsedEmbedOneBGEM3
+    | ParsedEmbedOneDenseSparse
+    | ParsedEmbedOneDenseBGEM3
+    | ParsedEmbedOneSparseBGEM3
+    | ParsedEmbedOneDenseSparseBGEM3
 )
 
 
@@ -686,6 +828,92 @@ class FiniteEmbeddingsClient:
             return ParsedEmbedResponseBGEM3(texts_count=texts_count, bgeM3=bge_m3)
         raise ValueError("At least one of dense, sparse, or bgeM3 must be returned.")
 
+    @staticmethod
+    def _embed_one_payload_to_batch(payload: EmbedOneRequestAny) -> EmbedRequestAny:
+        if "text" not in payload:
+            raise ValueError("text must be provided.")
+        text = payload["text"]
+        batch = dict(cast(dict[str, object], payload))
+        del batch["text"]
+        batch["texts"] = [text]
+        return cast(EmbedRequestAny, batch)
+
+    @staticmethod
+    def _dense_emb_to_vector(dense: DenseEmbeddings) -> DenseEmbeddingVector:
+        if dense.vectors.shape[0] != 1:
+            raise ValueError("embed_one requires batch size 1 for dense embeddings.")
+        return DenseEmbeddingVector(
+            model_id=dense.model_id,
+            vector=np.asarray(dense.vectors[0], dtype=np.float32),
+        )
+
+    @staticmethod
+    def _sparse_emb_to_one(sparse: SparseEmbeddings) -> SparseEmbeddingsOne:
+        if len(sparse.items) != 1:
+            raise ValueError("embed_one requires batch size 1 for sparse embeddings.")
+        return SparseEmbeddingsOne(model_id=sparse.model_id, item=sparse.items[0])
+
+    @staticmethod
+    def _bge_m3_emb_to_one(bge: BGEM3Embeddings) -> BGEM3EmbeddingOne:
+        if (
+            bge.dense.vectors.shape[0] != 1
+            or len(bge.sparse.items) != 1
+            or len(bge.colbert) != 1
+        ):
+            raise ValueError("embed_one requires batch size 1 for BGE-M3 embeddings.")
+        return BGEM3EmbeddingOne(
+            model_id=bge.model_id,
+            dense=DenseEmbeddingVector(
+                model_id=bge.dense.model_id,
+                vector=np.asarray(bge.dense.vectors[0], dtype=np.float32),
+            ),
+            sparse=SparseEmbeddingsOne(
+                model_id=bge.sparse.model_id, item=bge.sparse.items[0]
+            ),
+            colbert=np.asarray(bge.colbert[0], dtype=np.float32),
+        )
+
+    @staticmethod
+    def _parsed_embed_batch_to_one(
+        response: ParsedEmbedResponseVariant,
+    ) -> ParsedEmbedOneVariant:
+        if response.texts_count != 1:
+            raise ValueError("embed_one requires texts_count == 1.")
+        if isinstance(response, ParsedEmbedResponseDenseSparseBGEM3):
+            return ParsedEmbedOneDenseSparseBGEM3(
+                dense=FiniteEmbeddingsClient._dense_emb_to_vector(response.dense),
+                sparse=FiniteEmbeddingsClient._sparse_emb_to_one(response.sparse),
+                bgeM3=FiniteEmbeddingsClient._bge_m3_emb_to_one(response.bgeM3),
+            )
+        if isinstance(response, ParsedEmbedResponseDenseSparse):
+            return ParsedEmbedOneDenseSparse(
+                dense=FiniteEmbeddingsClient._dense_emb_to_vector(response.dense),
+                sparse=FiniteEmbeddingsClient._sparse_emb_to_one(response.sparse),
+            )
+        if isinstance(response, ParsedEmbedResponseDenseBGEM3):
+            return ParsedEmbedOneDenseBGEM3(
+                dense=FiniteEmbeddingsClient._dense_emb_to_vector(response.dense),
+                bgeM3=FiniteEmbeddingsClient._bge_m3_emb_to_one(response.bgeM3),
+            )
+        if isinstance(response, ParsedEmbedResponseSparseBGEM3):
+            return ParsedEmbedOneSparseBGEM3(
+                sparse=FiniteEmbeddingsClient._sparse_emb_to_one(response.sparse),
+                bgeM3=FiniteEmbeddingsClient._bge_m3_emb_to_one(response.bgeM3),
+            )
+        if isinstance(response, ParsedEmbedResponseDense):
+            return ParsedEmbedOneDense(
+                dense=FiniteEmbeddingsClient._dense_emb_to_vector(response.dense)
+            )
+        if isinstance(response, ParsedEmbedResponseSparse):
+            return ParsedEmbedOneSparse(
+                sparse=FiniteEmbeddingsClient._sparse_emb_to_one(response.sparse)
+            )
+        if isinstance(response, ParsedEmbedResponseBGEM3):
+            return ParsedEmbedOneBGEM3(
+                bgeM3=FiniteEmbeddingsClient._bge_m3_emb_to_one(response.bgeM3)
+            )
+        raise AssertionError("Unreachable embed response variant.")
+
     async def _embed_remote(
         self, payload: EmbedRequestAny
     ) -> ParsedEmbedResponseVariant:
@@ -1086,6 +1314,71 @@ class FiniteEmbeddingsClient:
         return self._embed_cache_finalize(prepared)
 
     @overload
+    async def aembed_one(
+        self,
+        payload: DenseSparseBGEM3EmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneDenseSparseBGEM3: ...
+
+    @overload
+    async def aembed_one(
+        self,
+        payload: DenseSparseEmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneDenseSparse: ...
+
+    @overload
+    async def aembed_one(
+        self,
+        payload: DenseBGEM3EmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneDenseBGEM3: ...
+
+    @overload
+    async def aembed_one(
+        self,
+        payload: SparseBGEM3EmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneSparseBGEM3: ...
+
+    @overload
+    async def aembed_one(
+        self,
+        payload: DenseEmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneDense: ...
+
+    @overload
+    async def aembed_one(
+        self,
+        payload: SparseEmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneSparse: ...
+
+    @overload
+    async def aembed_one(
+        self,
+        payload: BGEM3EmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneBGEM3: ...
+
+    async def aembed_one(
+        self, payload: EmbedOneRequestPayload, *, use_cache: bool | None = None
+    ) -> ParsedEmbedOneVariant:
+        batch = self._embed_one_payload_to_batch(payload)
+        parsed = await self.aembed(
+            cast(EmbedRequestPayload, batch), use_cache=use_cache
+        )
+        return self._parsed_embed_batch_to_one(parsed)
+
+    @overload
     def embed(
         self,
         payload: DenseSparseBGEM3EmbedRequestDict,
@@ -1152,6 +1445,69 @@ class FiniteEmbeddingsClient:
             self._embed_cache_merge_remote(prepared, remote)
 
         return self._embed_cache_finalize(prepared)
+
+    @overload
+    def embed_one(
+        self,
+        payload: DenseSparseBGEM3EmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneDenseSparseBGEM3: ...
+
+    @overload
+    def embed_one(
+        self,
+        payload: DenseSparseEmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneDenseSparse: ...
+
+    @overload
+    def embed_one(
+        self,
+        payload: DenseBGEM3EmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneDenseBGEM3: ...
+
+    @overload
+    def embed_one(
+        self,
+        payload: SparseBGEM3EmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneSparseBGEM3: ...
+
+    @overload
+    def embed_one(
+        self,
+        payload: DenseEmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneDense: ...
+
+    @overload
+    def embed_one(
+        self,
+        payload: SparseEmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneSparse: ...
+
+    @overload
+    def embed_one(
+        self,
+        payload: BGEM3EmbedOneRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedOneBGEM3: ...
+
+    def embed_one(
+        self, payload: EmbedOneRequestPayload, *, use_cache: bool | None = None
+    ) -> ParsedEmbedOneVariant:
+        batch = self._embed_one_payload_to_batch(payload)
+        parsed = self.embed(cast(EmbedRequestPayload, batch), use_cache=use_cache)
+        return self._parsed_embed_batch_to_one(parsed)
 
     async def arerank(self, payload: RerankRequestDict) -> ParsedRerankResponse:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
