@@ -611,8 +611,12 @@ class FiniteEmbeddingsClient:
             sparse_items[:] = self._load_sparse_items(sparse_keys)
 
         if bge_model_id is not None and bge_dense_vectors is not None:
-            bge_dense_keys = [self._bge_dense_cache_key(bge_model_id, text) for text in texts]
-            bge_dense_vectors[:] = self._load_dense_vectors(bge_dense_keys, expected_dim=None)
+            bge_dense_keys = [
+                self._bge_dense_cache_key(bge_model_id, text) for text in texts
+            ]
+            bge_dense_vectors[:] = self._load_dense_vectors(
+                bge_dense_keys, expected_dim=None
+            )
 
         if bge_model_id is not None and bge_sparse_items is not None:
             bge_sparse_keys = [
@@ -633,7 +637,9 @@ class FiniteEmbeddingsClient:
             bge_dense_hit = (
                 bge_dense_vectors is None or bge_dense_vectors[idx] is not None
             )
-            bge_sparse_hit = bge_sparse_items is None or bge_sparse_items[idx] is not None
+            bge_sparse_hit = (
+                bge_sparse_items is None or bge_sparse_items[idx] is not None
+            )
             bge_colbert_hit = (
                 bge_colbert_items is None or bge_colbert_items[idx] is not None
             )

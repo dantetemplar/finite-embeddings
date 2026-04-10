@@ -141,13 +141,17 @@ def _load_model_config_from_env() -> Any:
         model_id = item.get("model_id")
         kwargs = item.get("kwargs")
         if model_type not in ("dense", "sparse", "reranker", "bgeM3"):
-            raise RuntimeError(f"Invalid model type in {MODEL_CONFIG_ENV}: {model_type!r}")
+            raise RuntimeError(
+                f"Invalid model type in {MODEL_CONFIG_ENV}: {model_type!r}"
+            )
         if not isinstance(model_id, str):
             raise RuntimeError(f"Invalid model_id in {MODEL_CONFIG_ENV}: {model_id!r}")
         if not isinstance(kwargs, dict):
             raise RuntimeError(f"Invalid kwargs in {MODEL_CONFIG_ENV}: {kwargs!r}")
         models.append(
-            server.ModelInstanceConfig(type=model_type, model_id=model_id, kwargs=kwargs)
+            server.ModelInstanceConfig(
+                type=model_type, model_id=model_id, kwargs=kwargs
+            )
         )
     return server.ModelConfig(models=models)
 

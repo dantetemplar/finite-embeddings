@@ -755,6 +755,4 @@ def run_server(
 ) -> None:
     logging.basicConfig(level=logging.INFO)
     app = build_app(model_config)
-    uvicorn.run(
-        app, host=host, port=port, reload=reload, **uvicorn_kwargs
-    )
+    uvicorn.run(app, host=host, port=port, reload=reload, **uvicorn_kwargs)

@@ -115,7 +115,6 @@ def read_chunk_write_buffered(env, start, end):
                 txn.put(k_, v_.tobytes())
 
 
-
 APPROACHES = {
     "read_txn_and_write_txt_for_each_item": read_txn_and_write_txt_for_each_item,
     "write_txn_for_each_item": write_txn_for_each_item,
@@ -166,6 +165,7 @@ def is_valid_combo(cfg_name, mode):
     if cfg_name == "nolock" and mode != "single":
         return False, "lock=False is unsafe for concurrent threads/processes"
     return True, ""
+
 
 # --------------------------------------------------
 # Configs
@@ -285,7 +285,9 @@ if __name__ == "__main__":
     # TABLE
     # --------------------------------------------------
     print("\n=== FULL TABLE ===")
-    print(f"{'config':10s} | {'mode':10s} | {'approach':18s} | {'time':8s} | {'ops/sec':10s}")
+    print(
+        f"{'config':10s} | {'mode':10s} | {'approach':18s} | {'time':8s} | {'ops/sec':10s}"
+    )
     print("-" * 70)
 
     for cfg, mode, app, avg, ops in results:

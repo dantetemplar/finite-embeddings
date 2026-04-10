@@ -230,7 +230,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Benchmark hash functions for LMDB cache key generation."
     )
-    parser.add_argument("--samples", type=int, default=100_000, help="Base sample count.")
+    parser.add_argument(
+        "--samples", type=int, default=100_000, help="Base sample count."
+    )
     parser.add_argument("--repeats", type=int, default=3, help="Benchmark repeats.")
     parser.add_argument("--seed", type=int, default=1337, help="RNG seed.")
     args = parser.parse_args()
@@ -252,7 +254,9 @@ def main() -> None:
     for name, factory in hashers:
         payloads_per_sec, mb_per_sec = bench_hash(factory, payloads, args.repeats)
         results.append((name, payloads_per_sec, mb_per_sec))
-        print(f"[done] {name:10s} | {payloads_per_sec:12.0f} payload/s | {mb_per_sec:10.2f} MiB/s")
+        print(
+            f"[done] {name:10s} | {payloads_per_sec:12.0f} payload/s | {mb_per_sec:10.2f} MiB/s"
+        )
 
     results.sort(key=lambda row: row[1], reverse=True)
     print("\n=== Sorted by payload/s (higher is better) ===")
