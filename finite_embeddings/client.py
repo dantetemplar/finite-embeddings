@@ -7,24 +7,87 @@ import json
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, NotRequired, TypedDict, cast
+from typing import Literal, NotRequired, Required, TypedDict, TypeGuard, cast, overload
 
 import httpx
 import lmdb
 import numpy as np
+import numpy.typing as npt
+
+Float32Array = npt.NDArray[np.float32]
+Float16Array = npt.NDArray[np.float16]
+UInt32Array = npt.NDArray[np.uint32]
 
 
-class EmbedRequestDict(TypedDict):
+class EmbedRequestCommonDict(TypedDict):
     texts: list[str]
-    dense_model_id: NotRequired[str | None]
     dense_truncate_dim: NotRequired[int | None]
     dense_prompt: NotRequired[str]
     dense_task: NotRequired[Literal["query", "document"] | None]
-    sparse_model_id: NotRequired[str | None]
     sparse_max_active_dims: NotRequired[int | None]
     sparse_pruning_ratio: NotRequired[float | None]
-    bge_model_id: NotRequired[str | None]
     sparse_task: NotRequired[Literal["query", "document"] | None]
+
+
+class DenseEmbedRequestDict(EmbedRequestCommonDict):
+    dense_model_id: Required[str]
+    sparse_model_id: NotRequired[None]
+    bge_model_id: NotRequired[None]
+
+
+class SparseEmbedRequestDict(EmbedRequestCommonDict):
+    dense_model_id: NotRequired[None]
+    sparse_model_id: Required[str]
+    bge_model_id: NotRequired[None]
+
+
+class BGEM3EmbedRequestDict(EmbedRequestCommonDict):
+    dense_model_id: NotRequired[None]
+    sparse_model_id: NotRequired[None]
+    bge_model_id: Required[str]
+
+
+class DenseSparseEmbedRequestDict(EmbedRequestCommonDict):
+    dense_model_id: Required[str]
+    sparse_model_id: Required[str]
+    bge_model_id: NotRequired[None]
+
+
+class DenseBGEM3EmbedRequestDict(EmbedRequestCommonDict):
+    dense_model_id: Required[str]
+    sparse_model_id: NotRequired[None]
+    bge_model_id: Required[str]
+
+
+class SparseBGEM3EmbedRequestDict(EmbedRequestCommonDict):
+    dense_model_id: NotRequired[None]
+    sparse_model_id: Required[str]
+    bge_model_id: Required[str]
+
+
+class DenseSparseBGEM3EmbedRequestDict(EmbedRequestCommonDict):
+    dense_model_id: Required[str]
+    sparse_model_id: Required[str]
+    bge_model_id: Required[str]
+
+
+class _EmbedRequestImplDict(EmbedRequestCommonDict):
+    dense_model_id: NotRequired[str | None]
+    sparse_model_id: NotRequired[str | None]
+    bge_model_id: NotRequired[str | None]
+
+
+EmbedRequestPayload = (
+    DenseEmbedRequestDict
+    | SparseEmbedRequestDict
+    | BGEM3EmbedRequestDict
+    | DenseSparseEmbedRequestDict
+    | DenseBGEM3EmbedRequestDict
+    | SparseBGEM3EmbedRequestDict
+    | DenseSparseBGEM3EmbedRequestDict
+)
+
+EmbedRequestAny = EmbedRequestPayload | _EmbedRequestImplDict
 
 
 class RerankRequestDict(TypedDict):
@@ -102,14 +165,14 @@ class RerankResponseDict(TypedDict):
 @dataclass(slots=True)
 class DenseEmbeddings:
     model_id: str
-    vectors: np.ndarray
+    vectors: Float32Array
 
 
 @dataclass(slots=True)
 class SparseEmbedding:
     dim: int
-    indices: np.ndarray
-    values: np.ndarray
+    indices: UInt32Array
+    values: Float32Array
 
 
 @dataclass(slots=True)
@@ -119,19 +182,67 @@ class SparseEmbeddings:
 
 
 @dataclass(slots=True)
-class ParsedEmbedResponse:
-    texts_count: int
-    dense: DenseEmbeddings | None
-    sparse: SparseEmbeddings | None
-    bgeM3: "BGEM3Embeddings | None"
-
-
-@dataclass(slots=True)
 class BGEM3Embeddings:
     model_id: str
     dense: DenseEmbeddings
     sparse: SparseEmbeddings
-    colbert: list[np.ndarray]
+    colbert: list[Float32Array]
+
+
+@dataclass(slots=True)
+class ParsedEmbedResponseCommon:
+    texts_count: int
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedResponseDense(ParsedEmbedResponseCommon):
+    dense: DenseEmbeddings
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedResponseSparse(ParsedEmbedResponseCommon):
+    sparse: SparseEmbeddings
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedResponseBGEM3(ParsedEmbedResponseCommon):
+    bgeM3: BGEM3Embeddings
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedResponseDenseSparse(ParsedEmbedResponseCommon):
+    dense: DenseEmbeddings
+    sparse: SparseEmbeddings
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedResponseDenseBGEM3(ParsedEmbedResponseCommon):
+    dense: DenseEmbeddings
+    bgeM3: BGEM3Embeddings
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedResponseSparseBGEM3(ParsedEmbedResponseCommon):
+    sparse: SparseEmbeddings
+    bgeM3: BGEM3Embeddings
+
+
+@dataclass(slots=True, kw_only=True)
+class ParsedEmbedResponseDenseSparseBGEM3(ParsedEmbedResponseCommon):
+    dense: DenseEmbeddings
+    sparse: SparseEmbeddings
+    bgeM3: BGEM3Embeddings
+
+
+ParsedEmbedResponseVariant = (
+    ParsedEmbedResponseDense
+    | ParsedEmbedResponseSparse
+    | ParsedEmbedResponseBGEM3
+    | ParsedEmbedResponseDenseSparse
+    | ParsedEmbedResponseDenseBGEM3
+    | ParsedEmbedResponseSparseBGEM3
+    | ParsedEmbedResponseDenseSparseBGEM3
+)
 
 
 @dataclass(slots=True)
@@ -143,7 +254,7 @@ class ParsedRerankResponse:
 
 @dataclass(slots=True)
 class _EmbedCacheProgress:
-    payload: EmbedRequestDict
+    payload: EmbedRequestAny
     texts: list[str]
     misses: list[int]
     dense_model_id: str | None
@@ -155,11 +266,11 @@ class _EmbedCacheProgress:
     sparse_max_active_dims: int | None
     sparse_pruning_ratio: float | None
     sparse_task: Literal["query", "document"] | None
-    dense_vectors: list[np.ndarray | None] | None
+    dense_vectors: list[Float32Array | None] | None
     sparse_items: list[SparseEmbedding | None] | None
-    bge_dense_vectors: list[np.ndarray | None] | None
+    bge_dense_vectors: list[Float32Array | None] | None
     bge_sparse_items: list[SparseEmbedding | None] | None
-    bge_colbert_items: list[np.ndarray | None] | None
+    bge_colbert_items: list[Float32Array | None] | None
 
 
 def _decode_dense(dense: DenseResponseDict) -> DenseEmbeddings:
@@ -194,7 +305,7 @@ def _decode_sparse(sparse: SparseResponseDict) -> SparseEmbeddings:
     )
 
 
-def _decode_colbert_item(item: ColbertItemResponseDict) -> np.ndarray:
+def _decode_colbert_item(item: ColbertItemResponseDict) -> Float32Array:
     raw = base64.b64decode(item["data"])
     vectors = np.frombuffer(raw, dtype=np.float32)
     shape = tuple(item["shape"])
@@ -215,37 +326,25 @@ def _decode_bge_m3(bge_m3: BGEM3ResponseDict) -> BGEM3Embeddings:
     )
 
 
-def _normalize_dense_vectors_for_lmdb_cache(vectors: np.ndarray) -> np.ndarray:
-    """Align with float16 LMDB storage so network and cache hits return the same dense values."""
+def _roundtrip_float32_float16_float32(vectors: np.ndarray) -> Float32Array:
+    """Align with float16 LMDB storage so network and cache hits return the same vector values."""
     return np.asarray(vectors, dtype=np.float32).astype(np.float16).astype(np.float32)
 
 
-def _normalize_colbert_vector_for_lmdb_cache(vectors: np.ndarray) -> np.ndarray:
-    """Align colbert values with float16 LMDB storage for stable hit/miss behavior."""
-    return np.asarray(vectors, dtype=np.float32).astype(np.float16).astype(np.float32)
-
-
-def default_cache(
-    cache_dir: str | Path | None = None,
-    cache_map_size: int = 2 * 1024 * 1024 * 1024,
-) -> lmdb.Environment:
-    resolved_cache_dir = (
-        Path(cache_dir).expanduser()
-        if cache_dir is not None
-        else Path.home() / ".cache" / "finite-embeddings" / "client-cache.lmdb"
-    )
-    resolved_cache_dir.mkdir(parents=True, exist_ok=True)
-    return lmdb.open(
-        str(resolved_cache_dir),
-        map_size=cache_map_size,
-    )
+def all_present[T](items: list[T | None] | None) -> TypeGuard[list[T]]:
+    if items is None:
+        return False
+    for item in items:
+        if item is None:
+            return False
+    return True
 
 
 class FiniteEmbeddingsClient:
     def __init__(
         self,
-        client: httpx.AsyncClient | None = None,
-        sync_client: httpx.Client | None = None,
+        client: httpx.Client | None = None,
+        aclient: httpx.AsyncClient | None = None,
         use_cache: bool = False,
         cache: lmdb.Environment | None = None,
         cache_path: str | Path | None = None,
@@ -253,33 +352,35 @@ class FiniteEmbeddingsClient:
     ) -> None:
         # Caller owns lifecycle and configuration (base_url, timeout, headers).
         self._client = client
-        self._sync_client = sync_client
-        if self._client is None and self._sync_client is None:
-            raise ValueError(
-                "Either client or sync_client must be provided, may be both."
-            )
+        self._aclient = aclient
+        if self._client is None and self._aclient is None:
+            raise ValueError("Either client or aclient must be provided, may be both.")
         self._cache = cache
         self._use_cache = use_cache or self._cache is not None
         if self._use_cache and self._cache is None:
-            self._cache = default_cache(
-                cache_dir=cache_path, cache_map_size=cache_map_size
+            resolved_cache_dir = (
+                Path(cache_path).expanduser()
+                if cache_path is not None
+                else Path.home() / ".cache" / "finite-embeddings" / "client-cache.lmdb"
             )
+            resolved_cache_dir.mkdir(parents=True, exist_ok=True)
+            self._cache = lmdb.open(str(resolved_cache_dir), map_size=cache_map_size)
 
     @property
-    def client(self) -> httpx.AsyncClient:
+    def client(self) -> httpx.Client:
         if self._client is None:
             raise RuntimeError(
-                "client is not configured; pass client=httpx.AsyncClient(...) to FiniteEmbeddingsClient(...)."
+                "client is not configured; pass client=httpx.Client(...) to FiniteEmbeddingsClient(...)."
             )
         return self._client
 
     @property
-    def sync_client(self) -> httpx.Client:
-        if self._sync_client is None:
+    def aclient(self) -> httpx.AsyncClient:
+        if self._aclient is None:
             raise RuntimeError(
-                "sync_client is not configured; pass sync_client=httpx.Client(...) to FiniteEmbeddingsClient(...)."
+                "aclient is not configured; pass aclient=httpx.AsyncClient(...) to FiniteEmbeddingsClient(...)."
             )
-        return self._sync_client
+        return self._aclient
 
     @staticmethod
     def _dense_cache_key(
@@ -384,8 +485,12 @@ class FiniteEmbeddingsClient:
         val_end = idx_end + (nnz * 4)
         if len(raw) != val_end:
             return None
-        indices = np.frombuffer(raw[8:idx_end], dtype=np.uint32).copy()
-        values = np.frombuffer(raw[idx_end:val_end], dtype=np.float32).copy()
+        indices = cast(
+            UInt32Array, np.frombuffer(raw[8:idx_end], dtype=np.uint32).copy()
+        )
+        values = cast(
+            Float32Array, np.frombuffer(raw[idx_end:val_end], dtype=np.float32).copy()
+        )
         return SparseEmbedding(dim=int(dim), indices=indices, values=values)
 
     @staticmethod
@@ -488,19 +593,104 @@ class FiniteEmbeddingsClient:
         except Exception:
             return
 
-    async def models(self) -> ModelsResponseDict:
-        response = await self.client.get("/models", headers={"Accept-Encoding": "gzip"})
+    async def amodels(self) -> ModelsResponseDict:
+        response = await self.aclient.get(
+            "/models", headers={"Accept-Encoding": "gzip"}
+        )
         response.raise_for_status()
         return response.json()
 
-    def models_sync(self) -> ModelsResponseDict:
-        response = self.sync_client.get("/models", headers={"Accept-Encoding": "gzip"})
+    def models(self) -> ModelsResponseDict:
+        response = self.client.get("/models", headers={"Accept-Encoding": "gzip"})
         response.raise_for_status()
         return response.json()
 
-    async def _embed_remote(self, payload: EmbedRequestDict) -> ParsedEmbedResponse:
+    @staticmethod
+    def _build_parsed_embed_response(
+        *,
+        texts_count: int,
+        dense: DenseEmbeddings | None = None,
+        sparse: SparseEmbeddings | None = None,
+        bge_m3: BGEM3Embeddings | None = None,
+        payload: EmbedRequestAny,
+        raw: EmbedResponseDict | None = None,
+    ) -> ParsedEmbedResponseVariant:
+        if raw is not None:
+            texts_len = len(payload.get("texts", []))
+
+            if payload.get("dense_model_id") is not None:
+                if raw["dense"] is not None:
+                    dense = _decode_dense(raw["dense"])
+                    if len(dense.vectors) != texts_len:
+                        raise ValueError(
+                            "Dense remote embed failed: mismatch in texts count."
+                        )
+                else:
+                    raise ValueError(
+                        "Dense remote embed failed: unresolved vectors remain."
+                    )
+
+            if payload.get("sparse_model_id") is not None:
+                if raw["sparse"] is not None:
+                    sparse = _decode_sparse(raw["sparse"])
+                    if len(sparse.items) != texts_len:
+                        raise ValueError(
+                            "Sparse remote embed failed: mismatch in texts count."
+                        )
+                else:
+                    raise ValueError(
+                        "Sparse remote embed failed: unresolved items remain."
+                    )
+
+            if payload.get("bge_model_id") is not None:
+                if raw["bgeM3"] is not None:
+                    bge_m3 = _decode_bge_m3(raw["bgeM3"])
+                    if len(bge_m3.dense.vectors) != texts_len:
+                        raise ValueError(
+                            "BGE-M3 remote embed failed: mismatch in texts count."
+                        )
+                    if len(bge_m3.sparse.items) != texts_len:
+                        raise ValueError(
+                            "BGE-M3 remote embed failed: mismatch in texts count."
+                        )
+                    if len(bge_m3.colbert) != texts_len:
+                        raise ValueError(
+                            "BGE-M3 remote embed failed: mismatch in texts count."
+                        )
+                else:
+                    raise ValueError(
+                        "BGE-M3 remote embed failed: unresolved vectors remain."
+                    )
+
+        if dense is not None and sparse is not None and bge_m3 is not None:
+            return ParsedEmbedResponseDenseSparseBGEM3(
+                texts_count=texts_count, dense=dense, sparse=sparse, bgeM3=bge_m3
+            )
+        if dense is not None and sparse is not None:
+            return ParsedEmbedResponseDenseSparse(
+                texts_count=texts_count, dense=dense, sparse=sparse
+            )
+        if dense is not None and bge_m3 is not None:
+            return ParsedEmbedResponseDenseBGEM3(
+                texts_count=texts_count, dense=dense, bgeM3=bge_m3
+            )
+        if sparse is not None and bge_m3 is not None:
+            return ParsedEmbedResponseSparseBGEM3(
+                texts_count=texts_count, sparse=sparse, bgeM3=bge_m3
+            )
+        if dense is not None:
+            return ParsedEmbedResponseDense(texts_count=texts_count, dense=dense)
+        if sparse is not None:
+            return ParsedEmbedResponseSparse(texts_count=texts_count, sparse=sparse)
+        if bge_m3 is not None:
+            return ParsedEmbedResponseBGEM3(texts_count=texts_count, bgeM3=bge_m3)
+        raise ValueError("At least one of dense, sparse, or bgeM3 must be returned.")
+
+    async def _embed_remote(
+        self, payload: EmbedRequestAny
+    ) -> ParsedEmbedResponseVariant:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
-        response = await self.client.post(
+        response = await self.aclient.post(
             "/embed",
             content=gzipped_payload,
             headers={
@@ -511,16 +701,15 @@ class FiniteEmbeddingsClient:
         )
         response.raise_for_status()
         raw = cast(EmbedResponseDict, response.json())
-        return ParsedEmbedResponse(
-            texts_count=raw["texts_count"],
-            dense=_decode_dense(raw["dense"]) if raw["dense"] is not None else None,
-            sparse=_decode_sparse(raw["sparse"]) if raw["sparse"] is not None else None,
-            bgeM3=_decode_bge_m3(raw["bgeM3"]) if raw["bgeM3"] is not None else None,
+        return self._build_parsed_embed_response(
+            texts_count=raw["texts_count"], payload=payload, raw=raw
         )
 
-    def _embed_remote_sync(self, payload: EmbedRequestDict) -> ParsedEmbedResponse:
+    def _embed_remote_sync(
+        self, payload: EmbedRequestAny
+    ) -> ParsedEmbedResponseVariant:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
-        response = self.sync_client.post(
+        response = self.client.post(
             "/embed",
             content=gzipped_payload,
             headers={
@@ -531,30 +720,23 @@ class FiniteEmbeddingsClient:
         )
         response.raise_for_status()
         raw = cast(EmbedResponseDict, response.json())
-        return ParsedEmbedResponse(
-            texts_count=raw["texts_count"],
-            dense=_decode_dense(raw["dense"]) if raw["dense"] is not None else None,
-            sparse=_decode_sparse(raw["sparse"]) if raw["sparse"] is not None else None,
-            bgeM3=_decode_bge_m3(raw["bgeM3"]) if raw["bgeM3"] is not None else None,
+        return self._build_parsed_embed_response(
+            texts_count=raw["texts_count"], payload=payload, raw=raw
         )
 
-    def _embed_cache_prepare(
-        self, payload: EmbedRequestDict
-    ) -> _EmbedCacheProgress | None:
+    def _embed_cache_prepare(self, payload: EmbedRequestAny) -> _EmbedCacheProgress:
         texts = payload.get("texts", [])
         dense_model_id = payload.get("dense_model_id")
-        sparse_model_id = payload.get("sparse_model_id")
-        bge_model_id = payload.get("bge_model_id")
         dense_truncate_dim = payload.get("dense_truncate_dim")
         dense_prompt = payload.get("dense_prompt") or ""
         dense_task = payload.get("dense_task")
+
+        sparse_model_id = payload.get("sparse_model_id")
         sparse_max_active_dims = payload.get("sparse_max_active_dims")
         sparse_pruning_ratio = payload.get("sparse_pruning_ratio")
         sparse_task = payload.get("sparse_task")
-        if not texts or (
-            dense_model_id is None and sparse_model_id is None and bge_model_id is None
-        ):
-            return None
+
+        bge_model_id = payload.get("bge_model_id")
 
         dense_vectors: list[np.ndarray | None] | None = (
             cast(list[np.ndarray | None], [None for _ in texts])
@@ -673,7 +855,7 @@ class FiniteEmbeddingsClient:
         )
 
     def _embed_cache_merge_remote(
-        self, p: _EmbedCacheProgress, remote: ParsedEmbedResponse
+        self, p: _EmbedCacheProgress, remote: ParsedEmbedResponseVariant
     ) -> None:
         to_store_dense: list[tuple[bytes, np.ndarray]] = []
         to_store_sparse: list[tuple[bytes, SparseEmbedding]] = []
@@ -683,7 +865,15 @@ class FiniteEmbeddingsClient:
         for miss_row, idx in enumerate(p.misses):
             text = p.texts[idx]
             if p.dense_model_id is not None and p.dense_vectors is not None:
-                if remote.dense is None:
+                if not isinstance(
+                    remote,
+                    (
+                        ParsedEmbedResponseDense,
+                        ParsedEmbedResponseDenseSparse,
+                        ParsedEmbedResponseDenseBGEM3,
+                        ParsedEmbedResponseDenseSparseBGEM3,
+                    ),
+                ):
                     raise ValueError(
                         "Dense cache expected dense embeddings in server response."
                     )
@@ -698,7 +888,15 @@ class FiniteEmbeddingsClient:
                 )
                 to_store_dense.append((dense_key, vector))
             if p.sparse_model_id is not None and p.sparse_items is not None:
-                if remote.sparse is None:
+                if not isinstance(
+                    remote,
+                    (
+                        ParsedEmbedResponseSparse,
+                        ParsedEmbedResponseDenseSparse,
+                        ParsedEmbedResponseSparseBGEM3,
+                        ParsedEmbedResponseDenseSparseBGEM3,
+                    ),
+                ):
                     raise ValueError(
                         "Sparse cache expected sparse embeddings in server response."
                     )
@@ -713,7 +911,15 @@ class FiniteEmbeddingsClient:
                 )
                 to_store_sparse.append((sparse_key, item))
             if p.bge_model_id is not None:
-                if remote.bgeM3 is None:
+                if not isinstance(
+                    remote,
+                    (
+                        ParsedEmbedResponseBGEM3,
+                        ParsedEmbedResponseDenseBGEM3,
+                        ParsedEmbedResponseSparseBGEM3,
+                        ParsedEmbedResponseDenseSparseBGEM3,
+                    ),
+                ):
                     raise ValueError(
                         "BGE-M3 cache expected bgeM3 embeddings in server response."
                     )
@@ -747,85 +953,128 @@ class FiniteEmbeddingsClient:
         self._save_sparse_items(to_store_bge_sparse)
         self._save_colbert_items(to_store_bge_colbert)
 
-    def _embed_cache_finalize(self, p: _EmbedCacheProgress) -> ParsedEmbedResponse:
+    def _embed_cache_finalize(
+        self, p: _EmbedCacheProgress
+    ) -> ParsedEmbedResponseVariant:
         merged_dense: DenseEmbeddings | None = None
-        if p.dense_model_id is not None and p.dense_vectors is not None:
-            if any(vector is None for vector in p.dense_vectors):
+        if p.dense_model_id is not None:
+            if all_present(p.dense_vectors):
+                dense_vectors = _roundtrip_float32_float16_float32(
+                    np.vstack(p.dense_vectors)
+                )
+            else:
                 raise ValueError("Dense cache merge failed: unresolved vectors remain.")
             merged_dense = DenseEmbeddings(
-                model_id=p.dense_model_id,
-                vectors=_normalize_dense_vectors_for_lmdb_cache(
-                    np.vstack(p.dense_vectors)
-                ),  # type: ignore[arg-type]
+                model_id=p.dense_model_id, vectors=dense_vectors
             )
 
         merged_sparse: SparseEmbeddings | None = None
-        if p.sparse_model_id is not None and p.sparse_items is not None:
-            if any(item is None for item in p.sparse_items):
+        if p.sparse_model_id is not None:
+            if all_present(p.sparse_items):
+                sparse_items = p.sparse_items
+            else:
                 raise ValueError("Sparse cache merge failed: unresolved items remain.")
             merged_sparse = SparseEmbeddings(
-                model_id=p.sparse_model_id,
-                items=[item for item in p.sparse_items if item is not None],
+                model_id=p.sparse_model_id, items=sparse_items
             )
 
         merged_bge: BGEM3Embeddings | None = None
-        if (
-            p.bge_model_id is not None
-            and p.bge_dense_vectors is not None
-            and p.bge_sparse_items is not None
-            and p.bge_colbert_items is not None
-        ):
-            if any(vector is None for vector in p.bge_dense_vectors):
-                raise ValueError(
-                    "BGE-M3 cache merge failed: unresolved dense vectors remain."
+        if p.bge_model_id is not None:
+            if (
+                all_present(p.bge_dense_vectors)
+                and all_present(p.bge_sparse_items)
+                and all_present(p.bge_colbert_items)
+            ):
+                bge_dense_vectors = _roundtrip_float32_float16_float32(
+                    np.vstack(p.bge_dense_vectors)
                 )
-            if any(item is None for item in p.bge_sparse_items):
+                bge_sparse_items = p.bge_sparse_items
+                bge_colbert_items = [
+                    _roundtrip_float32_float16_float32(item)
+                    for item in p.bge_colbert_items
+                ]
+            else:
                 raise ValueError(
-                    "BGE-M3 cache merge failed: unresolved sparse items remain."
-                )
-            if any(item is None for item in p.bge_colbert_items):
-                raise ValueError(
-                    "BGE-M3 cache merge failed: unresolved colbert items remain."
+                    "BGE-M3 cache merge failed: unresolved vectors remain."
                 )
             merged_bge = BGEM3Embeddings(
                 model_id=p.bge_model_id,
                 dense=DenseEmbeddings(
-                    model_id=p.bge_model_id,
-                    vectors=_normalize_dense_vectors_for_lmdb_cache(
-                        np.vstack(p.bge_dense_vectors)
-                    ),  # type: ignore[arg-type]
+                    model_id=p.bge_model_id, vectors=bge_dense_vectors
                 ),
                 sparse=SparseEmbeddings(
-                    model_id=p.bge_model_id,
-                    items=[item for item in p.bge_sparse_items if item is not None],
+                    model_id=p.bge_model_id, items=bge_sparse_items
                 ),
-                colbert=[
-                    _normalize_colbert_vector_for_lmdb_cache(item)
-                    for item in p.bge_colbert_items
-                    if item is not None
-                ],
+                colbert=bge_colbert_items,
             )
 
-        return ParsedEmbedResponse(
+        return self._build_parsed_embed_response(
             texts_count=len(p.texts),
             dense=merged_dense,
             sparse=merged_sparse,
-            bgeM3=merged_bge,
+            bge_m3=merged_bge,
+            payload=p.payload,
         )
 
-    async def embed(
-        self, payload: EmbedRequestDict, *, use_cache: bool | None = None
-    ) -> ParsedEmbedResponse:
+    @overload
+    async def aembed(
+        self,
+        payload: DenseSparseBGEM3EmbedRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedResponseDenseSparseBGEM3: ...
+
+    @overload
+    async def aembed(
+        self, payload: DenseSparseEmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseDenseSparse: ...
+
+    @overload
+    async def aembed(
+        self, payload: DenseBGEM3EmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseDenseBGEM3: ...
+
+    @overload
+    async def aembed(
+        self, payload: SparseBGEM3EmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseSparseBGEM3: ...
+
+    @overload
+    async def aembed(
+        self, payload: DenseEmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseDense: ...
+
+    @overload
+    async def aembed(
+        self, payload: SparseEmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseSparse: ...
+
+    @overload
+    async def aembed(
+        self, payload: BGEM3EmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseBGEM3: ...
+
+    async def aembed(
+        self, payload: EmbedRequestPayload, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseVariant:
+        if not payload.get("texts"):
+            raise ValueError("At least one text must be provided.")
+
+        if (
+            not payload.get("dense_model_id")
+            and not payload.get("sparse_model_id")
+            and not payload.get("bge_model_id")
+        ):
+            raise ValueError("At least one model must be provided.")
+
         should_use_cache = self._use_cache if use_cache is None else use_cache
         if not should_use_cache:
             return await self._embed_remote(payload)
 
         prepared = self._embed_cache_prepare(payload)
-        if prepared is None:
-            return await self._embed_remote(payload)
 
         if prepared.misses:
-            miss_payload = cast(EmbedRequestDict, dict(prepared.payload))
+            miss_payload = prepared.payload
             miss_payload["texts"] = [prepared.texts[idx] for idx in prepared.misses]
             remote = await self._embed_remote(miss_payload)
             if remote.texts_count != len(prepared.misses):
@@ -836,19 +1085,64 @@ class FiniteEmbeddingsClient:
 
         return self._embed_cache_finalize(prepared)
 
-    def embed_sync(
-        self, payload: EmbedRequestDict, *, use_cache: bool | None = None
-    ) -> ParsedEmbedResponse:
+    @overload
+    def embed(
+        self,
+        payload: DenseSparseBGEM3EmbedRequestDict,
+        *,
+        use_cache: bool | None = None,
+    ) -> ParsedEmbedResponseDenseSparseBGEM3: ...
+
+    @overload
+    def embed(
+        self, payload: DenseSparseEmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseDenseSparse: ...
+
+    @overload
+    def embed(
+        self, payload: DenseBGEM3EmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseDenseBGEM3: ...
+
+    @overload
+    def embed(
+        self, payload: SparseBGEM3EmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseSparseBGEM3: ...
+
+    @overload
+    def embed(
+        self, payload: DenseEmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseDense: ...
+
+    @overload
+    def embed(
+        self, payload: SparseEmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseSparse: ...
+
+    @overload
+    def embed(
+        self, payload: BGEM3EmbedRequestDict, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseBGEM3: ...
+
+    def embed(
+        self, payload: EmbedRequestPayload, *, use_cache: bool | None = None
+    ) -> ParsedEmbedResponseVariant:
+        if not payload.get("texts"):
+            raise ValueError("At least one text must be provided.")
+        if (
+            not payload.get("dense_model_id")
+            and not payload.get("sparse_model_id")
+            and not payload.get("bge_model_id")
+        ):
+            raise ValueError("At least one model must be provided.")
+
         should_use_cache = self._use_cache if use_cache is None else use_cache
         if not should_use_cache:
             return self._embed_remote_sync(payload)
 
         prepared = self._embed_cache_prepare(payload)
-        if prepared is None:
-            return self._embed_remote_sync(payload)
 
         if prepared.misses:
-            miss_payload = cast(EmbedRequestDict, dict(prepared.payload))
+            miss_payload = cast(EmbedRequestAny, dict(prepared.payload))
             miss_payload["texts"] = [prepared.texts[idx] for idx in prepared.misses]
             remote = self._embed_remote_sync(miss_payload)
             if remote.texts_count != len(prepared.misses):
@@ -859,9 +1153,9 @@ class FiniteEmbeddingsClient:
 
         return self._embed_cache_finalize(prepared)
 
-    async def rerank(self, payload: RerankRequestDict) -> ParsedRerankResponse:
+    async def arerank(self, payload: RerankRequestDict) -> ParsedRerankResponse:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
-        response = await self.client.post(
+        response = await self.aclient.post(
             "/rerank",
             content=gzipped_payload,
             headers={
@@ -883,9 +1177,9 @@ class FiniteEmbeddingsClient:
             scores=raw["scores"],
         )
 
-    def rerank_sync(self, payload: RerankRequestDict) -> ParsedRerankResponse:
+    def rerank(self, payload: RerankRequestDict) -> ParsedRerankResponse:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
-        response = self.sync_client.post(
+        response = self.client.post(
             "/rerank",
             content=gzipped_payload,
             headers={
