@@ -225,12 +225,29 @@ def _normalize_colbert_vector_for_lmdb_cache(vectors: np.ndarray) -> np.ndarray:
     return np.asarray(vectors, dtype=np.float32).astype(np.float16).astype(np.float32)
 
 
+def default_cache(
+    cache_dir: str | Path | None = None,
+    cache_map_size: int = 2 * 1024 * 1024 * 1024,
+) -> lmdb.Environment:
+    resolved_cache_dir = (
+        Path(cache_dir).expanduser()
+        if cache_dir is not None
+        else Path.home() / ".cache" / "finite-embeddings" / "client-cache.lmdb"
+    )
+    resolved_cache_dir.mkdir(parents=True, exist_ok=True)
+    return lmdb.open(
+        str(resolved_cache_dir),
+        map_size=cache_map_size,
+    )
+
+
 class FiniteEmbeddingsClient:
     def __init__(
         self,
         client: httpx.AsyncClient | None = None,
         sync_client: httpx.Client | None = None,
         use_cache: bool = False,
+        cache: lmdb.Environment | None = None,
         cache_path: str | Path | None = None,
         cache_map_size: int = 2 * 1024 * 1024 * 1024,
     ) -> None:
@@ -241,24 +258,11 @@ class FiniteEmbeddingsClient:
             raise ValueError(
                 "Either client or sync_client must be provided, may be both."
             )
-        self._use_cache = use_cache
-        self._cache: lmdb.Environment | None = None
-        if self._use_cache:
-            cache_dir = (
-                Path(cache_path).expanduser()
-                if cache_path is not None
-                else Path.home() / ".cache" / "finite-embeddings" / "client-cache.lmdb"
-            )
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            self._cache = lmdb.open(
-                str(cache_dir),
-                map_size=cache_map_size,
-                subdir=True,
-                lock=True,
-                readonly=False,
-                readahead=True,
-                meminit=False,
-                max_dbs=1,
+        self._cache = cache
+        self._use_cache = use_cache or self._cache is not None
+        if self._use_cache and self._cache is None:
+            self._cache = default_cache(
+                cache_dir=cache_path, cache_map_size=cache_map_size
             )
 
     @property
@@ -292,12 +296,12 @@ class FiniteEmbeddingsClient:
         dim = 0 if truncate_dim is None else truncate_dim
         h.update(dim.to_bytes(4, "little", signed=False))
         h.update(b"\x00")
-        h.update(
-            json.dumps(
-                {"dense_prompt": dense_prompt, "dense_task": dense_task},
-                separators=(",", ":"),
-            ).encode("utf-8")
-        )
+        h.update(b"dense_prompt\x00")
+        h.update(dense_prompt.encode("utf-8"))
+        h.update(b"\x00")
+        h.update(b"dense_task\x00")
+        task_value = "" if dense_task is None else dense_task
+        h.update(task_value.encode("utf-8"))
         h.update(b"\x00")
         h.update(text.encode("utf-8"))
         return h.digest()
@@ -314,16 +318,17 @@ class FiniteEmbeddingsClient:
         h.update(b"sparse\x00")
         h.update(model_id.encode("utf-8"))
         h.update(b"\x00")
-        h.update(
-            json.dumps(
-                {
-                    "mad": max_active_dims,
-                    "pr": pruning_ratio,
-                    "sparse_task": sparse_task,
-                },
-                separators=(",", ":"),
-            ).encode("utf-8")
-        )
+        h.update(b"mad\x00")
+        if max_active_dims is not None:
+            h.update(max_active_dims.to_bytes(4, "little", signed=False))
+        h.update(b"\x00")
+        h.update(b"pr\x00")
+        if pruning_ratio is not None:
+            h.update(str(pruning_ratio).encode("utf-8"))
+        h.update(b"\x00")
+        h.update(b"sparse_task\x00")
+        task_value = "" if sparse_task is None else sparse_task
+        h.update(task_value.encode("utf-8"))
         h.update(b"\x00")
         h.update(text.encode("utf-8"))
         return h.digest()
@@ -355,26 +360,63 @@ class FiniteEmbeddingsClient:
         h.update(text.encode("utf-8"))
         return h.digest()
 
-    def _load_dense_vector(
-        self, key: bytes, expected_dim: int | None
+    @staticmethod
+    def _decode_dense_cache_value(
+        raw: bytes | None, expected_dim: int | None
     ) -> np.ndarray | None:
-        if self._cache is None:
+        if raw is None:
             return None
+        if expected_dim is not None:
+            vector = np.frombuffer(raw, dtype=np.float16, count=expected_dim).astype(
+                np.float32
+            )
+            if vector.size != expected_dim:
+                return None
+            return vector
+        return np.frombuffer(raw, dtype=np.float16).astype(np.float32)
+
+    @staticmethod
+    def _decode_sparse_cache_value(raw: bytes | None) -> SparseEmbedding | None:
+        if raw is None or len(raw) < 8:
+            return None
+        dim, nnz = struct.unpack("<II", raw[:8])
+        idx_end = 8 + (nnz * 4)
+        val_end = idx_end + (nnz * 4)
+        if len(raw) != val_end:
+            return None
+        indices = np.frombuffer(raw[8:idx_end], dtype=np.uint32).copy()
+        values = np.frombuffer(raw[idx_end:val_end], dtype=np.float32).copy()
+        return SparseEmbedding(dim=int(dim), indices=indices, values=values)
+
+    @staticmethod
+    def _decode_colbert_cache_value(raw: bytes | None) -> np.ndarray | None:
+        if raw is None or len(raw) < 8:
+            return None
+        rows, cols = struct.unpack("<II", raw[:8])
+        expected_bytes = int(rows) * int(cols) * 2
+        if len(raw) != (8 + expected_bytes):
+            return None
+        item = np.frombuffer(raw[8:], dtype=np.float16).astype(np.float32)
+        if item.size != int(rows) * int(cols):
+            return None
+        return item.reshape((int(rows), int(cols)))
+
+    def _load_dense_vectors(
+        self, keys: list[bytes], expected_dim: int | None
+    ) -> list[np.ndarray | None]:
+        results: list[np.ndarray | None] = [None for _ in keys]
+        if self._cache is None or not keys:
+            return results
         try:
             with self._cache.begin(write=False) as txn:
-                raw = txn.get(key)
-            if raw is None:
-                return None
-            if expected_dim is not None:
-                vector = np.frombuffer(
-                    raw, dtype=np.float16, count=expected_dim
-                ).astype(np.float32)
-                if vector.size != expected_dim:
-                    return None
-                return vector
-            return np.frombuffer(raw, dtype=np.float16).astype(np.float32)
+                for idx, key in enumerate(keys):
+                    raw = txn.get(key)
+                    results[idx] = self._decode_dense_cache_value(
+                        bytes(raw) if raw is not None else None, expected_dim
+                    )
         except Exception:
-            return None
+            return [None for _ in keys]
+        return results
 
     def _save_dense_vectors(self, items: list[tuple[bytes, np.ndarray]]) -> None:
         if self._cache is None or not items:
@@ -386,24 +428,20 @@ class FiniteEmbeddingsClient:
         except Exception:
             return
 
-    def _load_sparse_item(self, key: bytes) -> SparseEmbedding | None:
-        if self._cache is None:
-            return None
+    def _load_sparse_items(self, keys: list[bytes]) -> list[SparseEmbedding | None]:
+        results: list[SparseEmbedding | None] = [None for _ in keys]
+        if self._cache is None or not keys:
+            return results
         try:
             with self._cache.begin(write=False) as txn:
-                raw = txn.get(key)
-            if raw is None or len(raw) < 8:
-                return None
-            dim, nnz = struct.unpack("<II", raw[:8])
-            idx_end = 8 + (nnz * 4)
-            val_end = idx_end + (nnz * 4)
-            if len(raw) != val_end:
-                return None
-            indices = np.frombuffer(raw[8:idx_end], dtype=np.uint32).copy()
-            values = np.frombuffer(raw[idx_end:val_end], dtype=np.float32).copy()
-            return SparseEmbedding(dim=int(dim), indices=indices, values=values)
+                for idx, key in enumerate(keys):
+                    raw = txn.get(key)
+                    results[idx] = self._decode_sparse_cache_value(
+                        bytes(raw) if raw is not None else None
+                    )
         except Exception:
-            return None
+            return [None for _ in keys]
+        return results
 
     def _save_sparse_items(self, items: list[tuple[bytes, SparseEmbedding]]) -> None:
         if self._cache is None or not items:
@@ -420,24 +458,20 @@ class FiniteEmbeddingsClient:
         except Exception:
             return
 
-    def _load_colbert_item(self, key: bytes) -> np.ndarray | None:
-        if self._cache is None:
-            return None
+    def _load_colbert_items(self, keys: list[bytes]) -> list[np.ndarray | None]:
+        results: list[np.ndarray | None] = [None for _ in keys]
+        if self._cache is None or not keys:
+            return results
         try:
             with self._cache.begin(write=False) as txn:
-                raw = txn.get(key)
-            if raw is None or len(raw) < 8:
-                return None
-            rows, cols = struct.unpack("<II", raw[:8])
-            expected_bytes = int(rows) * int(cols) * 2
-            if len(raw) != (8 + expected_bytes):
-                return None
-            item = np.frombuffer(raw[8:], dtype=np.float16).astype(np.float32)
-            if item.size != int(rows) * int(cols):
-                return None
-            return item.reshape((int(rows), int(cols)))
+                for idx, key in enumerate(keys):
+                    raw = txn.get(key)
+                    results[idx] = self._decode_colbert_cache_value(
+                        bytes(raw) if raw is not None else None
+                    )
         except Exception:
-            return None
+            return [None for _ in keys]
+        return results
 
     def _save_colbert_items(self, items: list[tuple[bytes, np.ndarray]]) -> None:
         if self._cache is None or not items:
@@ -548,58 +582,61 @@ class FiniteEmbeddingsClient:
             else None
         )
 
-        misses: list[int] = []
-        for idx, text in enumerate(texts):
-            dense_hit = True
-            sparse_hit = True
-            bge_dense_hit = True
-            bge_sparse_hit = True
-            bge_colbert_hit = True
-            if dense_model_id is not None and dense_vectors is not None:
-                dense_key = self._dense_cache_key(
+        dense_keys: list[bytes] | None = None
+        sparse_keys: list[bytes] | None = None
+        bge_dense_keys: list[bytes] | None = None
+        bge_sparse_keys: list[bytes] | None = None
+        bge_colbert_keys: list[bytes] | None = None
+
+        if dense_model_id is not None and dense_vectors is not None:
+            dense_keys = [
+                self._dense_cache_key(
                     dense_model_id, dense_truncate_dim, dense_prompt, dense_task, text
                 )
-                cached_dense = self._load_dense_vector(dense_key, dense_truncate_dim)
-                if cached_dense is None:
-                    dense_hit = False
-                else:
-                    dense_vectors[idx] = cached_dense
-            if sparse_model_id is not None and sparse_items is not None:
-                sparse_key = self._sparse_cache_key(
+                for text in texts
+            ]
+            dense_vectors[:] = self._load_dense_vectors(dense_keys, dense_truncate_dim)
+
+        if sparse_model_id is not None and sparse_items is not None:
+            sparse_keys = [
+                self._sparse_cache_key(
                     sparse_model_id,
                     sparse_max_active_dims,
                     sparse_pruning_ratio,
                     sparse_task,
                     text,
                 )
-                cached_sparse = self._load_sparse_item(sparse_key)
-                if cached_sparse is None:
-                    sparse_hit = False
-                else:
-                    sparse_items[idx] = cached_sparse
-            if bge_model_id is not None and bge_dense_vectors is not None:
-                bge_dense_key = self._bge_dense_cache_key(bge_model_id, text)
-                cached_bge_dense = self._load_dense_vector(
-                    bge_dense_key, expected_dim=None
-                )
-                if cached_bge_dense is None:
-                    bge_dense_hit = False
-                else:
-                    bge_dense_vectors[idx] = cached_bge_dense
-            if bge_model_id is not None and bge_sparse_items is not None:
-                bge_sparse_key = self._bge_sparse_cache_key(bge_model_id, text)
-                cached_bge_sparse = self._load_sparse_item(bge_sparse_key)
-                if cached_bge_sparse is None:
-                    bge_sparse_hit = False
-                else:
-                    bge_sparse_items[idx] = cached_bge_sparse
-            if bge_model_id is not None and bge_colbert_items is not None:
-                bge_colbert_key = self._bge_colbert_cache_key(bge_model_id, text)
-                cached_bge_colbert = self._load_colbert_item(bge_colbert_key)
-                if cached_bge_colbert is None:
-                    bge_colbert_hit = False
-                else:
-                    bge_colbert_items[idx] = cached_bge_colbert
+                for text in texts
+            ]
+            sparse_items[:] = self._load_sparse_items(sparse_keys)
+
+        if bge_model_id is not None and bge_dense_vectors is not None:
+            bge_dense_keys = [self._bge_dense_cache_key(bge_model_id, text) for text in texts]
+            bge_dense_vectors[:] = self._load_dense_vectors(bge_dense_keys, expected_dim=None)
+
+        if bge_model_id is not None and bge_sparse_items is not None:
+            bge_sparse_keys = [
+                self._bge_sparse_cache_key(bge_model_id, text) for text in texts
+            ]
+            bge_sparse_items[:] = self._load_sparse_items(bge_sparse_keys)
+
+        if bge_model_id is not None and bge_colbert_items is not None:
+            bge_colbert_keys = [
+                self._bge_colbert_cache_key(bge_model_id, text) for text in texts
+            ]
+            bge_colbert_items[:] = self._load_colbert_items(bge_colbert_keys)
+
+        misses: list[int] = []
+        for idx in range(len(texts)):
+            dense_hit = dense_vectors is None or dense_vectors[idx] is not None
+            sparse_hit = sparse_items is None or sparse_items[idx] is not None
+            bge_dense_hit = (
+                bge_dense_vectors is None or bge_dense_vectors[idx] is not None
+            )
+            bge_sparse_hit = bge_sparse_items is None or bge_sparse_items[idx] is not None
+            bge_colbert_hit = (
+                bge_colbert_items is None or bge_colbert_items[idx] is not None
+            )
             if (
                 not dense_hit
                 or not sparse_hit

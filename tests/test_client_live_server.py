@@ -8,7 +8,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from finite_embeddings.client import EmbedRequestDict, FiniteEmbeddingsClient
+from finite_embeddings.client import (
+    EmbedRequestDict,
+    FiniteEmbeddingsClient,
+    default_cache,
+)
 
 
 @pytest.mark.anyio
@@ -95,6 +99,23 @@ async def test_client_embed_cache_hit_skips_remote(
             assert first_item.dim == second_item.dim
             assert np.array_equal(first_item.indices, second_item.indices)
             assert np.array_equal(first_item.values, second_item.values)
+
+
+@pytest.mark.parametrize("anyio_backend", ["asyncio"])
+@pytest.mark.anyio
+async def test_client_accepts_external_lmdb_environment(
+    tmp_path: Path, anyio_backend: str
+) -> None:
+    assert anyio_backend == "asyncio"
+    cache_env = default_cache(tmp_path / "external-cache.lmdb")
+    try:
+        base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+        async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as http_client:
+            client = FiniteEmbeddingsClient(http_client, cache=cache_env)
+            assert client._cache is cache_env
+            assert client._use_cache is True
+    finally:
+        cache_env.close()
 
 
 @pytest.mark.anyio
