@@ -80,7 +80,7 @@ Example:
 import httpx
 import numpy as np
 
-from meow_embed.client import MeowEmbedClient
+from meow_embed import MeowEmbedClient
 
 
 def numpy_info(array: np.ndarray) -> str:
@@ -202,7 +202,20 @@ print(f"    .colbert: {numpy_info(one.bgeM3.colbert)}")
 
 ### Client-side LMDB cache
 
-Enable with `use_cache=True`. Embeddings are keyed per text and model options. Set `cache_path` to an LMDB directory (default `~/.cache/meow-embed/client-cache.lmdb`); optional `cache_map_size` sets the map size in bytes (default 2 GiB).
+Pass an `EmbedCache` instance to enable caching. Embeddings are keyed per text and model options. `EmbedCache.open(path)` opens an LMDB directory (default `~/.cache/meow-embed/client-cache.lmdb`); the optional `map_size=` kwarg sets the map size in bytes (default 2 GiB). For full control over the LMDB environment, construct `EmbedCache(env=lmdb.open(...))` directly.
+
+Quick default-path convenience:
+
+```python
+import httpx
+
+from meow_embed import MeowEmbedClient
+
+client = MeowEmbedClient(
+    client=httpx.Client(base_url="http://127.0.0.1:8067"),
+    use_cache=True,  # auto-creates EmbedCache at ~/.cache/meow-embed/client-cache.lmdb
+)
+```
 
 ```python
 import tempfile
@@ -210,23 +223,27 @@ from pathlib import Path
 
 import httpx
 
-from meow_embed.client import DenseSparseEmbedRequestDict, MeowEmbedClient
+from meow_embed import EmbedCache, MeowEmbedClient
+from meow_embed.types import DenseSparseEmbedRequestDict
 
 
 with tempfile.TemporaryDirectory() as tmp:
     cache_path = Path(tmp) / "embed-cache.lmdb"
-    client = MeowEmbedClient(
-        httpx.Client(base_url="http://127.0.0.1:8067"),
-        use_cache=True,
-        cache_path=cache_path,
-    )
-    payload: DenseSparseEmbedRequestDict = {
-        "texts": ["hello world", "cache demo"],
-        "dense_model_id": "sergeyzh/BERTA",
-        "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
-    }
-    client.embed(payload)  # fills LMDB on miss
-    client.embed(payload)  # reads from LMDB
+    cache = EmbedCache.open(cache_path)
+    try:
+        client = MeowEmbedClient(
+            httpx.Client(base_url="http://127.0.0.1:8067"),
+            cache=cache,
+        )
+        payload: DenseSparseEmbedRequestDict = {
+            "texts": ["hello world", "cache demo"],
+            "dense_model_id": "sergeyzh/BERTA",
+            "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
+        }
+        client.embed(payload)  # fills LMDB on miss
+        client.embed(payload)  # reads from LMDB
+    finally:
+        cache.close()
 ```
 
 ### curl examples

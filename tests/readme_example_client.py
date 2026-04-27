@@ -1,7 +1,7 @@
 import httpx
 import numpy as np
 
-from meow_embed.client import MeowEmbedClient
+from meow_embed import MeowEmbedClient
 
 
 def numpy_info(array: np.ndarray) -> str:

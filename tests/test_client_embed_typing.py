@@ -8,7 +8,9 @@ import httpx
 import numpy as np
 import pytest
 
-from meow_embed.client import (
+from meow_embed import MeowEmbedClient
+from meow_embed.parsing import assemble_parsed_response
+from meow_embed.types import (
     BGEM3Embeddings,
     BGEM3EmbedOneRequestDict,
     BGEM3EmbedRequestDict,
@@ -22,7 +24,6 @@ from meow_embed.client import (
     DenseSparseEmbedOneRequestDict,
     DenseSparseEmbedRequestDict,
     EmbedRequestPayload,
-    MeowEmbedClient,
     ParsedEmbedOneBGEM3,
     ParsedEmbedOneDense,
     ParsedEmbedOneDenseBGEM3,
@@ -97,25 +98,21 @@ def _fake_parsed_embed(payload: EmbedRequestPayload) -> ParsedEmbedResponseVaria
             colbert=[np.zeros((2, 2), dtype=np.float32) for _ in texts],
         )
 
-    return MeowEmbedClient._build_parsed_embed_response(
+    return assemble_parsed_response(
         texts_count=n,
         dense=dense,
         sparse=sparse,
         bge_m3=bge_m3,
-        payload=payload,
-        raw=None,
     )
 
 
 class _EmbedHarnessClient(MeowEmbedClient):
-    def _embed_remote_sync(
-        self, payload: EmbedRequestPayload
-    ) -> ParsedEmbedResponseVariant:
+    def _embed_remote(self, payload: EmbedRequestPayload) -> ParsedEmbedResponseVariant:
         return _fake_parsed_embed(payload)
 
 
 class _AEmbedHarnessClient(MeowEmbedClient):
-    async def _embed_remote(
+    async def _aembed_remote(
         self, payload: EmbedRequestPayload
     ) -> ParsedEmbedResponseVariant:
         return _fake_parsed_embed(payload)

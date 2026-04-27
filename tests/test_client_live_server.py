@@ -9,9 +9,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from meow_embed.client import (
+from meow_embed import EmbedCache, MeowEmbedClient
+from meow_embed.types import (
     EmbedRequestPayload,
-    MeowEmbedClient,
     ParsedEmbedOneDenseSparse,
     ParsedEmbedResponseBGEM3,
     ParsedEmbedResponseDenseSparse,
@@ -100,37 +100,37 @@ async def test_client_embed_cache_hit_skips_remote(
         "sparse_model_id": sparse_model_id,
     }
 
-    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = MeowEmbedClient(
-            aclient=httpx_aclient,
-            use_cache=True,
-            cache_path=tmp_path / "client-cache.lmdb",
-        )
+    cache = EmbedCache.open(tmp_path / "client-cache.lmdb")
+    try:
+        async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
+            client = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
 
-        first = await client.aembed(payload)
-        assert isinstance(first, ParsedEmbedResponseDenseSparse)
+            first = await client.aembed(payload)
+            assert isinstance(first, ParsedEmbedResponseDenseSparse)
 
-        async def _fail_if_remote_called(payload_arg: object) -> object:
-            raise AssertionError(
-                f"Expected cache hit, but remote was called with: {payload_arg}"
-            )
+            async def _fail_if_remote_called(payload_arg: object) -> object:
+                raise AssertionError(
+                    f"Expected cache hit, but remote was called with: {payload_arg}"
+                )
 
-        monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
-        second = await client.aembed(payload)
-        assert isinstance(second, ParsedEmbedResponseDenseSparse)
+            monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
+            second = await client.aembed(payload)
+            assert isinstance(second, ParsedEmbedResponseDenseSparse)
 
-        assert second.texts_count == first.texts_count
-        assert second.dense is not None
-        assert second.sparse is not None
-        assert second.dense.vectors.shape == first.dense.vectors.shape
-        assert np.array_equal(first.dense.vectors, second.dense.vectors)
-        assert len(second.sparse.items) == len(first.sparse.items)
-        for first_item, second_item in zip(
-            first.sparse.items, second.sparse.items, strict=True
-        ):
-            assert first_item.dim == second_item.dim
-            assert np.array_equal(first_item.indices, second_item.indices)
-            assert np.array_equal(first_item.values, second_item.values)
+            assert second.texts_count == first.texts_count
+            assert second.dense is not None
+            assert second.sparse is not None
+            assert second.dense.vectors.shape == first.dense.vectors.shape
+            assert np.array_equal(first.dense.vectors, second.dense.vectors)
+            assert len(second.sparse.items) == len(first.sparse.items)
+            for first_item, second_item in zip(
+                first.sparse.items, second.sparse.items, strict=True
+            ):
+                assert first_item.dim == second_item.dim
+                assert np.array_equal(first_item.indices, second_item.indices)
+                assert np.array_equal(first_item.values, second_item.values)
+    finally:
+        cache.close()
 
 
 @pytest.mark.parametrize("anyio_backend", ["asyncio"])
@@ -143,11 +143,13 @@ async def test_client_accepts_external_lmdb_environment(
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_env = lmdb.open(str(cache_dir), map_size=2 * 1024 * 1024 * 1024)
     try:
+        cache = EmbedCache(env=cache_env)
         base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
         async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-            client = MeowEmbedClient(aclient=httpx_aclient, cache=cache_env)
-            assert client._cache is cache_env
-            assert client._use_cache is True
+            client = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
+            assert client.cache is cache
+            assert client.cache is not None
+            assert client.cache.env is cache_env
     finally:
         cache_env.close()
 
@@ -243,43 +245,43 @@ async def test_client_embed_bge_m3_cache_hit_skips_remote(
         "texts": ["cache bge one", "cache bge two"],
         "bge_model_id": bge_model_id,
     }
-    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = MeowEmbedClient(
-            aclient=httpx_aclient,
-            use_cache=True,
-            cache_path=tmp_path / "client-cache.lmdb",
-        )
-        models = await client.amodels()
-        available_model_ids = {
-            model["id"] for model in models["models"] if model["type"] == "bgeM3"
-        }
-        if bge_model_id not in available_model_ids:
-            pytest.skip(f"{bge_model_id} is not loaded on server")
+    cache = EmbedCache.open(tmp_path / "client-cache.lmdb")
+    try:
+        async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
+            client = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
+            models = await client.amodels()
+            available_model_ids = {
+                model["id"] for model in models["models"] if model["type"] == "bgeM3"
+            }
+            if bge_model_id not in available_model_ids:
+                pytest.skip(f"{bge_model_id} is not loaded on server")
 
-        first = await client.aembed(payload)
-        assert isinstance(first, ParsedEmbedResponseBGEM3)
+            first = await client.aembed(payload)
+            assert isinstance(first, ParsedEmbedResponseBGEM3)
 
-        async def _fail_if_remote_called(payload_arg: object) -> object:
-            raise AssertionError(
-                f"Expected cache hit, but remote was called with: {payload_arg}"
-            )
+            async def _fail_if_remote_called(payload_arg: object) -> object:
+                raise AssertionError(
+                    f"Expected cache hit, but remote was called with: {payload_arg}"
+                )
 
-        monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
-        second = await client.aembed(payload)
-        assert isinstance(second, ParsedEmbedResponseBGEM3)
-        assert np.array_equal(first.bgeM3.dense.vectors, second.bgeM3.dense.vectors)
-        assert len(first.bgeM3.sparse.items) == len(second.bgeM3.sparse.items)
-        for first_item, second_item in zip(
-            first.bgeM3.sparse.items, second.bgeM3.sparse.items, strict=True
-        ):
-            assert first_item.dim == second_item.dim
-            assert np.array_equal(first_item.indices, second_item.indices)
-            assert np.array_equal(first_item.values, second_item.values)
-        assert len(first.bgeM3.colbert) == len(second.bgeM3.colbert)
-        for first_row, second_row in zip(
-            first.bgeM3.colbert, second.bgeM3.colbert, strict=True
-        ):
-            assert np.array_equal(first_row, second_row)
+            monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
+            second = await client.aembed(payload)
+            assert isinstance(second, ParsedEmbedResponseBGEM3)
+            assert np.array_equal(first.bgeM3.dense.vectors, second.bgeM3.dense.vectors)
+            assert len(first.bgeM3.sparse.items) == len(second.bgeM3.sparse.items)
+            for first_item, second_item in zip(
+                first.bgeM3.sparse.items, second.bgeM3.sparse.items, strict=True
+            ):
+                assert first_item.dim == second_item.dim
+                assert np.array_equal(first_item.indices, second_item.indices)
+                assert np.array_equal(first_item.values, second_item.values)
+            assert len(first.bgeM3.colbert) == len(second.bgeM3.colbert)
+            for first_row, second_row in zip(
+                first.bgeM3.colbert, second.bgeM3.colbert, strict=True
+            ):
+                assert np.array_equal(first_row, second_row)
+    finally:
+        cache.close()
 
 
 @pytest.mark.anyio
@@ -348,39 +350,43 @@ async def test_client_embed_sync_cache_hit_skips_remote(
         "sparse_model_id": sparse_model_id,
     }
 
-    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = MeowEmbedClient(
-                sync_httpx_aclient,
-                httpx_aclient,
-                use_cache=True,
-                cache_path=tmp_path / "client-cache-sync.lmdb",
-            )
-
-            first = client.embed(payload)
-            assert isinstance(first, ParsedEmbedResponseDenseSparse)
-
-            def _fail_if_remote_called(payload_arg: object) -> object:
-                raise AssertionError(
-                    f"Expected cache hit, but remote was called with: {payload_arg}"
+    cache = EmbedCache.open(tmp_path / "client-cache-sync.lmdb")
+    try:
+        async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
+            with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
+                client = MeowEmbedClient(
+                    sync_httpx_aclient,
+                    httpx_aclient,
+                    cache=cache,
                 )
 
-            monkeypatch.setattr(client, "_embed_remote_sync", _fail_if_remote_called)
-            second = client.embed(payload)
-            assert isinstance(second, ParsedEmbedResponseDenseSparse)
+                first = client.embed(payload)
+                assert isinstance(first, ParsedEmbedResponseDenseSparse)
 
-            assert second.texts_count == first.texts_count
-            assert second.dense is not None
-            assert second.sparse is not None
-            assert second.dense.vectors.shape == first.dense.vectors.shape
-            assert np.array_equal(first.dense.vectors, second.dense.vectors)
-            assert len(second.sparse.items) == len(first.sparse.items)
-            for first_item, second_item in zip(
-                first.sparse.items, second.sparse.items, strict=True
-            ):
-                assert first_item.dim == second_item.dim
-                assert np.array_equal(first_item.indices, second_item.indices)
-                assert np.array_equal(first_item.values, second_item.values)
+                def _fail_if_remote_called(payload_arg: object) -> object:
+                    raise AssertionError(
+                        f"Expected cache hit, but remote was called with: {payload_arg}"
+                    )
+
+                    monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
+
+                second = client.embed(payload)
+                assert isinstance(second, ParsedEmbedResponseDenseSparse)
+
+                assert second.texts_count == first.texts_count
+                assert second.dense is not None
+                assert second.sparse is not None
+                assert second.dense.vectors.shape == first.dense.vectors.shape
+                assert np.array_equal(first.dense.vectors, second.dense.vectors)
+                assert len(second.sparse.items) == len(first.sparse.items)
+                for first_item, second_item in zip(
+                    first.sparse.items, second.sparse.items, strict=True
+                ):
+                    assert first_item.dim == second_item.dim
+                    assert np.array_equal(first_item.indices, second_item.indices)
+                    assert np.array_equal(first_item.values, second_item.values)
+    finally:
+        cache.close()
 
 
 @pytest.mark.anyio
@@ -454,42 +460,50 @@ async def test_client_embed_bge_m3_sync_cache_hit_skips_remote(
         "texts": ["cache bge sync one", "cache bge sync two"],
         "bge_model_id": bge_model_id,
     }
-    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = MeowEmbedClient(
-                sync_httpx_aclient,
-                httpx_aclient,
-                use_cache=True,
-                cache_path=tmp_path / "client-cache-bge-sync.lmdb",
-            )
-            models = client.models()
-            available_model_ids = {
-                model["id"] for model in models["models"] if model["type"] == "bgeM3"
-            }
-            if bge_model_id not in available_model_ids:
-                pytest.skip(f"{bge_model_id} is not loaded on server")
-
-            first = client.embed(payload)
-            assert isinstance(first, ParsedEmbedResponseBGEM3)
-
-            def _fail_if_remote_called(payload_arg: object) -> object:
-                raise AssertionError(
-                    f"Expected cache hit, but remote was called with: {payload_arg}"
+    cache = EmbedCache.open(tmp_path / "client-cache-bge-sync.lmdb")
+    try:
+        async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
+            with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
+                client = MeowEmbedClient(
+                    sync_httpx_aclient,
+                    httpx_aclient,
+                    cache=cache,
                 )
+                models = client.models()
+                available_model_ids = {
+                    model["id"]
+                    for model in models["models"]
+                    if model["type"] == "bgeM3"
+                }
+                if bge_model_id not in available_model_ids:
+                    pytest.skip(f"{bge_model_id} is not loaded on server")
 
-            monkeypatch.setattr(client, "_embed_remote_sync", _fail_if_remote_called)
-            second = client.embed(payload)
-            assert isinstance(second, ParsedEmbedResponseBGEM3)
-            assert np.array_equal(first.bgeM3.dense.vectors, second.bgeM3.dense.vectors)
-            assert len(first.bgeM3.sparse.items) == len(second.bgeM3.sparse.items)
-            for first_item, second_item in zip(
-                first.bgeM3.sparse.items, second.bgeM3.sparse.items, strict=True
-            ):
-                assert first_item.dim == second_item.dim
-                assert np.array_equal(first_item.indices, second_item.indices)
-                assert np.array_equal(first_item.values, second_item.values)
-            assert len(first.bgeM3.colbert) == len(second.bgeM3.colbert)
-            for first_row, second_row in zip(
-                first.bgeM3.colbert, second.bgeM3.colbert, strict=True
-            ):
-                assert np.array_equal(first_row, second_row)
+                first = client.embed(payload)
+                assert isinstance(first, ParsedEmbedResponseBGEM3)
+
+                def _fail_if_remote_called(payload_arg: object) -> object:
+                    raise AssertionError(
+                        f"Expected cache hit, but remote was called with: {payload_arg}"
+                    )
+
+                    monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
+
+                second = client.embed(payload)
+                assert isinstance(second, ParsedEmbedResponseBGEM3)
+                assert np.array_equal(
+                    first.bgeM3.dense.vectors, second.bgeM3.dense.vectors
+                )
+                assert len(first.bgeM3.sparse.items) == len(second.bgeM3.sparse.items)
+                for first_item, second_item in zip(
+                    first.bgeM3.sparse.items, second.bgeM3.sparse.items, strict=True
+                ):
+                    assert first_item.dim == second_item.dim
+                    assert np.array_equal(first_item.indices, second_item.indices)
+                    assert np.array_equal(first_item.values, second_item.values)
+                assert len(first.bgeM3.colbert) == len(second.bgeM3.colbert)
+                for first_row, second_row in zip(
+                    first.bgeM3.colbert, second.bgeM3.colbert, strict=True
+                ):
+                    assert np.array_equal(first_row, second_row)
+    finally:
+        cache.close()
