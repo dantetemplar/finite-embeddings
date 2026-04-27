@@ -7,12 +7,22 @@ import json
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, NotRequired, Required, TypedDict, TypeGuard, cast, overload
+from typing import (
+    Literal,
+    NotRequired,
+    Required,
+    Sequence,
+    TypedDict,
+    TypeGuard,
+    cast,
+    overload,
+)
 
 import httpx
 import lmdb
 import numpy as np
 import numpy.typing as npt
+from typing_extensions import ReadOnly
 
 type Float32Array = npt.NDArray[np.float32]
 type Float16Array = npt.NDArray[np.float16]
@@ -20,61 +30,55 @@ type UInt32Array = npt.NDArray[np.uint32]
 
 
 class EmbedRequestCommonDict(TypedDict):
-    texts: list[str]
-    dense_truncate_dim: NotRequired[int | None]
-    dense_prompt: NotRequired[str]
-    dense_task: NotRequired[Literal["query", "document"] | None]
-    sparse_max_active_dims: NotRequired[int | None]
-    sparse_pruning_ratio: NotRequired[float | None]
-    sparse_task: NotRequired[Literal["query", "document"] | None]
+    texts: ReadOnly[Sequence[str]]
+    dense_truncate_dim: ReadOnly[NotRequired[int | None]]
+    dense_prompt: ReadOnly[NotRequired[str]]
+    dense_task: ReadOnly[NotRequired[Literal["query", "document"] | None]]
+    sparse_max_active_dims: ReadOnly[NotRequired[int | None]]
+    sparse_pruning_ratio: ReadOnly[NotRequired[float | None]]
+    sparse_task: ReadOnly[NotRequired[Literal["query", "document"] | None]]
 
 
 class DenseEmbedRequestDict(EmbedRequestCommonDict):
-    dense_model_id: Required[str]
-    sparse_model_id: NotRequired[None]
-    bge_model_id: NotRequired[None]
+    dense_model_id: ReadOnly[Required[str]]
+    sparse_model_id: ReadOnly[NotRequired[None]]
+    bge_model_id: ReadOnly[NotRequired[None]]
 
 
 class SparseEmbedRequestDict(EmbedRequestCommonDict):
-    dense_model_id: NotRequired[None]
-    sparse_model_id: Required[str]
-    bge_model_id: NotRequired[None]
+    dense_model_id: ReadOnly[NotRequired[None]]
+    sparse_model_id: ReadOnly[Required[str]]
+    bge_model_id: ReadOnly[NotRequired[None]]
 
 
 class BGEM3EmbedRequestDict(EmbedRequestCommonDict):
-    dense_model_id: NotRequired[None]
-    sparse_model_id: NotRequired[None]
-    bge_model_id: Required[str]
+    dense_model_id: ReadOnly[NotRequired[None]]
+    sparse_model_id: ReadOnly[NotRequired[None]]
+    bge_model_id: ReadOnly[Required[str]]
 
 
 class DenseSparseEmbedRequestDict(EmbedRequestCommonDict):
-    dense_model_id: Required[str]
-    sparse_model_id: Required[str]
-    bge_model_id: NotRequired[None]
+    dense_model_id: ReadOnly[Required[str]]
+    sparse_model_id: ReadOnly[Required[str]]
+    bge_model_id: ReadOnly[NotRequired[None]]
 
 
 class DenseBGEM3EmbedRequestDict(EmbedRequestCommonDict):
-    dense_model_id: Required[str]
-    sparse_model_id: NotRequired[None]
-    bge_model_id: Required[str]
+    dense_model_id: ReadOnly[Required[str]]
+    sparse_model_id: ReadOnly[NotRequired[None]]
+    bge_model_id: ReadOnly[Required[str]]
 
 
 class SparseBGEM3EmbedRequestDict(EmbedRequestCommonDict):
-    dense_model_id: NotRequired[None]
-    sparse_model_id: Required[str]
-    bge_model_id: Required[str]
+    dense_model_id: ReadOnly[NotRequired[None]]
+    sparse_model_id: ReadOnly[Required[str]]
+    bge_model_id: ReadOnly[Required[str]]
 
 
 class DenseSparseBGEM3EmbedRequestDict(EmbedRequestCommonDict):
-    dense_model_id: Required[str]
-    sparse_model_id: Required[str]
-    bge_model_id: Required[str]
-
-
-class _EmbedRequestImplDict(EmbedRequestCommonDict):
-    dense_model_id: NotRequired[str | None]
-    sparse_model_id: NotRequired[str | None]
-    bge_model_id: NotRequired[str | None]
+    dense_model_id: ReadOnly[Required[str]]
+    sparse_model_id: ReadOnly[Required[str]]
+    bge_model_id: ReadOnly[Required[str]]
 
 
 EmbedRequestPayload = (
@@ -87,65 +91,59 @@ EmbedRequestPayload = (
     | DenseSparseBGEM3EmbedRequestDict
 )
 
-EmbedRequestAny = EmbedRequestPayload | _EmbedRequestImplDict
-
 
 class EmbedOneRequestCommonDict(TypedDict):
-    text: str
-    dense_truncate_dim: NotRequired[int | None]
-    dense_prompt: NotRequired[str]
-    dense_task: NotRequired[Literal["query", "document"] | None]
-    sparse_max_active_dims: NotRequired[int | None]
-    sparse_pruning_ratio: NotRequired[float | None]
-    sparse_task: NotRequired[Literal["query", "document"] | None]
+    text: ReadOnly[Required[str]]
+
+    dense_truncate_dim: ReadOnly[NotRequired[int | None]]
+    dense_prompt: ReadOnly[NotRequired[str]]
+    dense_task: ReadOnly[NotRequired[Literal["query", "document"] | None]]
+
+    sparse_max_active_dims: ReadOnly[NotRequired[int | None]]
+    sparse_pruning_ratio: ReadOnly[NotRequired[float | None]]
+    sparse_task: ReadOnly[NotRequired[Literal["query", "document"] | None]]
 
 
 class DenseEmbedOneRequestDict(EmbedOneRequestCommonDict):
-    dense_model_id: Required[str]
-    sparse_model_id: NotRequired[None]
-    bge_model_id: NotRequired[None]
+    dense_model_id: ReadOnly[Required[str]]
+    sparse_model_id: ReadOnly[NotRequired[None]]
+    bge_model_id: ReadOnly[NotRequired[None]]
 
 
 class SparseEmbedOneRequestDict(EmbedOneRequestCommonDict):
-    dense_model_id: NotRequired[None]
-    sparse_model_id: Required[str]
-    bge_model_id: NotRequired[None]
+    dense_model_id: ReadOnly[NotRequired[None]]
+    sparse_model_id: ReadOnly[Required[str]]
+    bge_model_id: ReadOnly[NotRequired[None]]
 
 
 class BGEM3EmbedOneRequestDict(EmbedOneRequestCommonDict):
-    dense_model_id: NotRequired[None]
-    sparse_model_id: NotRequired[None]
-    bge_model_id: Required[str]
+    dense_model_id: ReadOnly[NotRequired[None]]
+    sparse_model_id: ReadOnly[NotRequired[None]]
+    bge_model_id: ReadOnly[Required[str]]
 
 
 class DenseSparseEmbedOneRequestDict(EmbedOneRequestCommonDict):
-    dense_model_id: Required[str]
-    sparse_model_id: Required[str]
-    bge_model_id: NotRequired[None]
+    dense_model_id: ReadOnly[Required[str]]
+    sparse_model_id: ReadOnly[Required[str]]
+    bge_model_id: ReadOnly[NotRequired[None]]
 
 
 class DenseBGEM3EmbedOneRequestDict(EmbedOneRequestCommonDict):
-    dense_model_id: Required[str]
-    sparse_model_id: NotRequired[None]
-    bge_model_id: Required[str]
+    dense_model_id: ReadOnly[Required[str]]
+    sparse_model_id: ReadOnly[NotRequired[None]]
+    bge_model_id: ReadOnly[Required[str]]
 
 
 class SparseBGEM3EmbedOneRequestDict(EmbedOneRequestCommonDict):
-    dense_model_id: NotRequired[None]
-    sparse_model_id: Required[str]
-    bge_model_id: Required[str]
+    dense_model_id: ReadOnly[NotRequired[None]]
+    sparse_model_id: ReadOnly[Required[str]]
+    bge_model_id: ReadOnly[Required[str]]
 
 
 class DenseSparseBGEM3EmbedOneRequestDict(EmbedOneRequestCommonDict):
-    dense_model_id: Required[str]
-    sparse_model_id: Required[str]
-    bge_model_id: Required[str]
-
-
-class _EmbedOneRequestImplDict(EmbedOneRequestCommonDict):
-    dense_model_id: NotRequired[str | None]
-    sparse_model_id: NotRequired[str | None]
-    bge_model_id: NotRequired[str | None]
+    dense_model_id: ReadOnly[Required[str]]
+    sparse_model_id: ReadOnly[Required[str]]
+    bge_model_id: ReadOnly[Required[str]]
 
 
 EmbedOneRequestPayload = (
@@ -158,14 +156,12 @@ EmbedOneRequestPayload = (
     | DenseSparseBGEM3EmbedOneRequestDict
 )
 
-EmbedOneRequestAny = EmbedOneRequestPayload | _EmbedOneRequestImplDict
-
 
 class RerankRequestDict(TypedDict):
-    reranker_model_id: str
-    docs: list[str]
-    query: NotRequired[str | None]
-    queries: NotRequired[list[str] | None]
+    reranker_model_id: ReadOnly[str]
+    docs: ReadOnly[Sequence[str]]
+    query: ReadOnly[NotRequired[str | None]]
+    queries: ReadOnly[NotRequired[Sequence[str] | None]]
 
 
 class DenseResponseDict(TypedDict):
@@ -396,7 +392,7 @@ class ParsedRerankResponse:
 
 @dataclass(slots=True)
 class _EmbedCacheProgress:
-    payload: EmbedRequestAny
+    payload: EmbedRequestPayload
     texts: list[str]
     misses: list[int]
     dense_model_id: str | None
@@ -754,7 +750,7 @@ class MeowEmbedClient:
         dense: DenseEmbeddings | None = None,
         sparse: SparseEmbeddings | None = None,
         bge_m3: BGEM3Embeddings | None = None,
-        payload: EmbedRequestAny,
+        payload: EmbedRequestPayload,
         raw: EmbedResponseDict | None = None,
     ) -> ParsedEmbedResponseVariant:
         if raw is not None:
@@ -829,14 +825,16 @@ class MeowEmbedClient:
         raise ValueError("At least one of dense, sparse, or bgeM3 must be returned.")
 
     @staticmethod
-    def _embed_one_payload_to_batch(payload: EmbedOneRequestAny) -> EmbedRequestAny:
+    def _embed_one_payload_to_batch(
+        payload: EmbedOneRequestPayload,
+    ) -> EmbedRequestPayload:
         if "text" not in payload:
             raise ValueError("text must be provided.")
         text = payload["text"]
         batch = dict(cast(dict[str, object], payload))
         del batch["text"]
         batch["texts"] = [text]
-        return cast(EmbedRequestAny, batch)
+        return cast(EmbedRequestPayload, batch)
 
     @staticmethod
     def _dense_emb_to_vector(dense: DenseEmbeddings) -> DenseEmbeddingVector:
@@ -915,7 +913,7 @@ class MeowEmbedClient:
         raise AssertionError("Unreachable embed response variant.")
 
     async def _embed_remote(
-        self, payload: EmbedRequestAny
+        self, payload: EmbedRequestPayload
     ) -> ParsedEmbedResponseVariant:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
         response = await self.aclient.post(
@@ -934,7 +932,7 @@ class MeowEmbedClient:
         )
 
     def _embed_remote_sync(
-        self, payload: EmbedRequestAny
+        self, payload: EmbedRequestPayload
     ) -> ParsedEmbedResponseVariant:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
         response = self.client.post(
@@ -952,7 +950,7 @@ class MeowEmbedClient:
             texts_count=raw["texts_count"], payload=payload, raw=raw
         )
 
-    def _embed_cache_prepare(self, payload: EmbedRequestAny) -> _EmbedCacheProgress:
+    def _embed_cache_prepare(self, payload: EmbedRequestPayload) -> _EmbedCacheProgress:
         texts = payload.get("texts", [])
         dense_model_id = payload.get("dense_model_id")
         dense_truncate_dim = payload.get("dense_truncate_dim")
@@ -1064,7 +1062,7 @@ class MeowEmbedClient:
 
         return _EmbedCacheProgress(
             payload=payload,
-            texts=texts,
+            texts=list(texts),
             misses=misses,
             dense_model_id=dense_model_id,
             sparse_model_id=sparse_model_id,
@@ -1302,8 +1300,9 @@ class MeowEmbedClient:
         prepared = self._embed_cache_prepare(payload)
 
         if prepared.misses:
-            miss_payload = prepared.payload
+            miss_payload = dict(prepared.payload)
             miss_payload["texts"] = [prepared.texts[idx] for idx in prepared.misses]
+            miss_payload = cast(EmbedRequestPayload, miss_payload)
             remote = await self._embed_remote(miss_payload)
             if remote.texts_count != len(prepared.misses):
                 raise ValueError(
@@ -1435,8 +1434,10 @@ class MeowEmbedClient:
         prepared = self._embed_cache_prepare(payload)
 
         if prepared.misses:
-            miss_payload = cast(EmbedRequestAny, dict(prepared.payload))
+            miss_payload = dict(prepared.payload)
             miss_payload["texts"] = [prepared.texts[idx] for idx in prepared.misses]
+            miss_payload = cast(EmbedRequestPayload, miss_payload)
+
             remote = self._embed_remote_sync(miss_payload)
             if remote.texts_count != len(prepared.misses):
                 raise ValueError(

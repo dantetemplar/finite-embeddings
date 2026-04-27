@@ -14,14 +14,14 @@ from meow_embed.client import (
     BGEM3EmbedRequestDict,
     DenseBGEM3EmbedOneRequestDict,
     DenseBGEM3EmbedRequestDict,
-    DenseEmbedOneRequestDict,
     DenseEmbeddings,
+    DenseEmbedOneRequestDict,
     DenseEmbedRequestDict,
     DenseSparseBGEM3EmbedOneRequestDict,
     DenseSparseBGEM3EmbedRequestDict,
     DenseSparseEmbedOneRequestDict,
     DenseSparseEmbedRequestDict,
-    EmbedRequestAny,
+    EmbedRequestPayload,
     MeowEmbedClient,
     ParsedEmbedOneBGEM3,
     ParsedEmbedOneDense,
@@ -40,14 +40,14 @@ from meow_embed.client import (
     ParsedEmbedResponseVariant,
     SparseBGEM3EmbedOneRequestDict,
     SparseBGEM3EmbedRequestDict,
-    SparseEmbedOneRequestDict,
     SparseEmbedding,
     SparseEmbeddings,
+    SparseEmbedOneRequestDict,
     SparseEmbedRequestDict,
 )
 
 
-def _fake_parsed_embed(payload: EmbedRequestAny) -> ParsedEmbedResponseVariant:
+def _fake_parsed_embed(payload: EmbedRequestPayload) -> ParsedEmbedResponseVariant:
     texts = payload["texts"]
     n = len(texts)
     dense_id = payload.get("dense_model_id")
@@ -109,14 +109,14 @@ def _fake_parsed_embed(payload: EmbedRequestAny) -> ParsedEmbedResponseVariant:
 
 class _EmbedHarnessClient(MeowEmbedClient):
     def _embed_remote_sync(
-        self, payload: EmbedRequestAny
+        self, payload: EmbedRequestPayload
     ) -> ParsedEmbedResponseVariant:
         return _fake_parsed_embed(payload)
 
 
 class _AEmbedHarnessClient(MeowEmbedClient):
     async def _embed_remote(
-        self, payload: EmbedRequestAny
+        self, payload: EmbedRequestPayload
     ) -> ParsedEmbedResponseVariant:
         return _fake_parsed_embed(payload)
 
