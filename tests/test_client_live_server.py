@@ -9,9 +9,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from finite_embeddings.client import (
+from meow_embed.client import (
     EmbedRequestPayload,
-    FiniteEmbeddingsClient,
+    MeowEmbedClient,
     ParsedEmbedOneDenseSparse,
     ParsedEmbedResponseBGEM3,
     ParsedEmbedResponseDenseSparse,
@@ -20,9 +20,9 @@ from finite_embeddings.client import (
 
 @pytest.mark.anyio
 async def test_client_models_and_embed_live_server() -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = FiniteEmbeddingsClient(aclient=httpx_aclient)
+        client = MeowEmbedClient(aclient=httpx_aclient)
 
         models = await client.amodels()
         assert "models" in models
@@ -59,9 +59,9 @@ async def test_client_models_and_embed_live_server() -> None:
 
 @pytest.mark.anyio
 async def test_client_aembed_one_live_server() -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = FiniteEmbeddingsClient(aclient=httpx_aclient)
+        client = MeowEmbedClient(aclient=httpx_aclient)
 
         models = await client.amodels()
         available_model_ids = {model["id"] for model in models["models"]}
@@ -89,7 +89,7 @@ async def test_client_aembed_one_live_server() -> None:
 async def test_client_embed_cache_hit_skips_remote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     dense_model_id = "sergeyzh/BERTA"
     sparse_model_id = (
         "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1"
@@ -101,7 +101,7 @@ async def test_client_embed_cache_hit_skips_remote(
     }
 
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = FiniteEmbeddingsClient(
+        client = MeowEmbedClient(
             aclient=httpx_aclient,
             use_cache=True,
             cache_path=tmp_path / "client-cache.lmdb",
@@ -143,9 +143,9 @@ async def test_client_accepts_external_lmdb_environment(
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_env = lmdb.open(str(cache_dir), map_size=2 * 1024 * 1024 * 1024)
     try:
-        base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+        base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
         async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-            client = FiniteEmbeddingsClient(aclient=httpx_aclient, cache=cache_env)
+            client = MeowEmbedClient(aclient=httpx_aclient, cache=cache_env)
             assert client._cache is cache_env
             assert client._use_cache is True
     finally:
@@ -154,10 +154,10 @@ async def test_client_accepts_external_lmdb_environment(
 
 @pytest.mark.anyio
 async def test_client_rerank_live_server() -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     reranker_model_id = "BAAI/bge-reranker-v2-m3"
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = FiniteEmbeddingsClient(aclient=httpx_aclient)
+        client = MeowEmbedClient(aclient=httpx_aclient)
         models = await client.amodels()
         available_model_ids = {
             model["id"] for model in models["models"] if model["type"] == "reranker"
@@ -185,10 +185,10 @@ async def test_client_rerank_live_server() -> None:
 
 @pytest.mark.anyio
 async def test_client_embed_bge_m3_live_server() -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     bge_model_id = "BAAI/bge-m3"
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = FiniteEmbeddingsClient(aclient=httpx_aclient)
+        client = MeowEmbedClient(aclient=httpx_aclient)
         models = await client.amodels()
         bge_models = [model for model in models["models"] if model["type"] == "bgeM3"]
         available_model_ids = {
@@ -237,14 +237,14 @@ async def test_client_embed_bge_m3_live_server() -> None:
 async def test_client_embed_bge_m3_cache_hit_skips_remote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     bge_model_id = "BAAI/bge-m3"
     payload: EmbedRequestPayload = {
         "texts": ["cache bge one", "cache bge two"],
         "bge_model_id": bge_model_id,
     }
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = FiniteEmbeddingsClient(
+        client = MeowEmbedClient(
             aclient=httpx_aclient,
             use_cache=True,
             cache_path=tmp_path / "client-cache.lmdb",
@@ -284,23 +284,23 @@ async def test_client_embed_bge_m3_cache_hit_skips_remote(
 
 @pytest.mark.anyio
 async def test_sync_api_requires_sync_client() -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = FiniteEmbeddingsClient(aclient=httpx_aclient)
+        client = MeowEmbedClient(aclient=httpx_aclient)
         with pytest.raises(RuntimeError, match="client is not configured"):
             client.models()
 
 
 @pytest.mark.anyio
 async def test_client_models_and_embed_sync_live_server() -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     dense_model_id = "sergeyzh/BERTA"
     sparse_model_id = (
         "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1"
     )
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
         with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = FiniteEmbeddingsClient(sync_httpx_aclient, httpx_aclient)
+            client = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
 
             models = client.models()
             assert "models" in models
@@ -337,7 +337,7 @@ async def test_client_models_and_embed_sync_live_server() -> None:
 async def test_client_embed_sync_cache_hit_skips_remote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     dense_model_id = "sergeyzh/BERTA"
     sparse_model_id = (
         "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1"
@@ -350,7 +350,7 @@ async def test_client_embed_sync_cache_hit_skips_remote(
 
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
         with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = FiniteEmbeddingsClient(
+            client = MeowEmbedClient(
                 sync_httpx_aclient,
                 httpx_aclient,
                 use_cache=True,
@@ -385,11 +385,11 @@ async def test_client_embed_sync_cache_hit_skips_remote(
 
 @pytest.mark.anyio
 async def test_client_sync_rerank_live_server() -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     reranker_model_id = "BAAI/bge-reranker-v2-m3"
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
         with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = FiniteEmbeddingsClient(sync_httpx_aclient, httpx_aclient)
+            client = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
             models = client.models()
             available_model_ids = {
                 model["id"] for model in models["models"] if model["type"] == "reranker"
@@ -417,11 +417,11 @@ async def test_client_sync_rerank_live_server() -> None:
 
 @pytest.mark.anyio
 async def test_client_embed_bge_m3_sync_live_server() -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     bge_model_id = "BAAI/bge-m3"
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
         with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = FiniteEmbeddingsClient(sync_httpx_aclient, httpx_aclient)
+            client = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
             models = client.models()
             available_model_ids = {
                 model["id"] for model in models["models"] if model["type"] == "bgeM3"
@@ -448,7 +448,7 @@ async def test_client_embed_bge_m3_sync_live_server() -> None:
 async def test_client_embed_bge_m3_sync_cache_hit_skips_remote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base_url = os.getenv("FINITE_EMBEDDINGS_BASE_URL", "http://127.0.0.1:8067")
+    base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     bge_model_id = "BAAI/bge-m3"
     payload: EmbedRequestPayload = {
         "texts": ["cache bge sync one", "cache bge sync two"],
@@ -456,7 +456,7 @@ async def test_client_embed_bge_m3_sync_cache_hit_skips_remote(
     }
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
         with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = FiniteEmbeddingsClient(
+            client = MeowEmbedClient(
                 sync_httpx_aclient,
                 httpx_aclient,
                 use_cache=True,

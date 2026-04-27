@@ -1,18 +1,18 @@
 import httpx
 import numpy as np
 
-from finite_embeddings.client import FiniteEmbeddingsClient
+from meow_embed.client import MeowEmbedClient
 
 
 def numpy_info(array: np.ndarray) -> str:
     return f"[ndarray] shape={array.shape}, dtype={array.dtype}"
 
 
-client = FiniteEmbeddingsClient(
+client = MeowEmbedClient(
     client=httpx.Client(base_url="http://127.0.0.1:8067"),
-    aclient=httpx.AsyncClient(base_url="http://127.0.0.1:8067"), # NOTE: async version
+    aclient=httpx.AsyncClient(base_url="http://127.0.0.1:8067"),  # NOTE: async version
 )
-models = client.models() # NOTE: async version is await client.amodels()
+models = client.models()  # NOTE: async version is await client.amodels()
 print(models)
 # { 'models': [
 #   {
@@ -40,7 +40,7 @@ result = client.embed(
         "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
         "bge_model_id": "BAAI/bge-m3",
     }
-) # NOTE: async version is await client.aembed(...)
+)  # NOTE: async version is await client.aembed(...)
 print("======== embed ========")
 print(f"texts_count: {result.texts_count}")
 
@@ -88,7 +88,7 @@ one = client.embed_one(
         "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
         "bge_model_id": "BAAI/bge-m3",
     }
-) # NOTE: async version is await client.aembed_one(...)
+)  # NOTE: async version is await client.aembed_one(...)
 assert one.dense.vector.shape == (768,)
 print("======== embed one ========")
 print("dense")

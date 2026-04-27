@@ -482,7 +482,7 @@ def all_present[T](items: list[T | None] | None) -> TypeGuard[list[T]]:
     return True
 
 
-class FiniteEmbeddingsClient:
+class MeowEmbedClient:
     def __init__(
         self,
         client: httpx.Client | None = None,
@@ -503,7 +503,7 @@ class FiniteEmbeddingsClient:
             resolved_cache_dir = (
                 Path(cache_path).expanduser()
                 if cache_path is not None
-                else Path.home() / ".cache" / "finite-embeddings" / "client-cache.lmdb"
+                else Path.home() / ".cache" / "meow-embed" / "client-cache.lmdb"
             )
             resolved_cache_dir.mkdir(parents=True, exist_ok=True)
             self._cache = lmdb.open(str(resolved_cache_dir), map_size=cache_map_size)
@@ -512,7 +512,7 @@ class FiniteEmbeddingsClient:
     def client(self) -> httpx.Client:
         if self._client is None:
             raise RuntimeError(
-                "client is not configured; pass client=httpx.Client(...) to FiniteEmbeddingsClient(...)."
+                "client is not configured; pass client=httpx.Client(...) to MeowEmbedClient(...)."
             )
         return self._client
 
@@ -520,7 +520,7 @@ class FiniteEmbeddingsClient:
     def aclient(self) -> httpx.AsyncClient:
         if self._aclient is None:
             raise RuntimeError(
-                "aclient is not configured; pass aclient=httpx.AsyncClient(...) to FiniteEmbeddingsClient(...)."
+                "aclient is not configured; pass aclient=httpx.AsyncClient(...) to MeowEmbedClient(...)."
             )
         return self._aclient
 
@@ -881,36 +881,36 @@ class FiniteEmbeddingsClient:
             raise ValueError("embed_one requires texts_count == 1.")
         if isinstance(response, ParsedEmbedResponseDenseSparseBGEM3):
             return ParsedEmbedOneDenseSparseBGEM3(
-                dense=FiniteEmbeddingsClient._dense_emb_to_vector(response.dense),
-                sparse=FiniteEmbeddingsClient._sparse_emb_to_one(response.sparse),
-                bgeM3=FiniteEmbeddingsClient._bge_m3_emb_to_one(response.bgeM3),
+                dense=MeowEmbedClient._dense_emb_to_vector(response.dense),
+                sparse=MeowEmbedClient._sparse_emb_to_one(response.sparse),
+                bgeM3=MeowEmbedClient._bge_m3_emb_to_one(response.bgeM3),
             )
         if isinstance(response, ParsedEmbedResponseDenseSparse):
             return ParsedEmbedOneDenseSparse(
-                dense=FiniteEmbeddingsClient._dense_emb_to_vector(response.dense),
-                sparse=FiniteEmbeddingsClient._sparse_emb_to_one(response.sparse),
+                dense=MeowEmbedClient._dense_emb_to_vector(response.dense),
+                sparse=MeowEmbedClient._sparse_emb_to_one(response.sparse),
             )
         if isinstance(response, ParsedEmbedResponseDenseBGEM3):
             return ParsedEmbedOneDenseBGEM3(
-                dense=FiniteEmbeddingsClient._dense_emb_to_vector(response.dense),
-                bgeM3=FiniteEmbeddingsClient._bge_m3_emb_to_one(response.bgeM3),
+                dense=MeowEmbedClient._dense_emb_to_vector(response.dense),
+                bgeM3=MeowEmbedClient._bge_m3_emb_to_one(response.bgeM3),
             )
         if isinstance(response, ParsedEmbedResponseSparseBGEM3):
             return ParsedEmbedOneSparseBGEM3(
-                sparse=FiniteEmbeddingsClient._sparse_emb_to_one(response.sparse),
-                bgeM3=FiniteEmbeddingsClient._bge_m3_emb_to_one(response.bgeM3),
+                sparse=MeowEmbedClient._sparse_emb_to_one(response.sparse),
+                bgeM3=MeowEmbedClient._bge_m3_emb_to_one(response.bgeM3),
             )
         if isinstance(response, ParsedEmbedResponseDense):
             return ParsedEmbedOneDense(
-                dense=FiniteEmbeddingsClient._dense_emb_to_vector(response.dense)
+                dense=MeowEmbedClient._dense_emb_to_vector(response.dense)
             )
         if isinstance(response, ParsedEmbedResponseSparse):
             return ParsedEmbedOneSparse(
-                sparse=FiniteEmbeddingsClient._sparse_emb_to_one(response.sparse)
+                sparse=MeowEmbedClient._sparse_emb_to_one(response.sparse)
             )
         if isinstance(response, ParsedEmbedResponseBGEM3):
             return ParsedEmbedOneBGEM3(
-                bgeM3=FiniteEmbeddingsClient._bge_m3_emb_to_one(response.bgeM3)
+                bgeM3=MeowEmbedClient._bge_m3_emb_to_one(response.bgeM3)
             )
         raise AssertionError("Unreachable embed response variant.")
 

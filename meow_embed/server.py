@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.sparse_encoder import SparseEncoder
 
-from finite_embeddings import __description__, __version__
+from meow_embed import __description__, __version__
 
 
 @dataclass(slots=True)
@@ -456,7 +456,7 @@ def build_app(config: ModelConfig) -> FastAPI:
         app.state.bge_m3_models = {}
 
     app = FastAPI(
-        title="finite-embeddings",
+        title="meow-embed",
         description=__description__,
         version=__version__,
         lifespan=lifespan,

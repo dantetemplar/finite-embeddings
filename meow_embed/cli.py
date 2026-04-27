@@ -5,7 +5,7 @@ import os
 import sys
 from typing import Any, Literal
 
-MODEL_CONFIG_ENV = "FINITE_EMBEDDINGS_MODEL_CONFIG_JSON"
+MODEL_CONFIG_ENV = "MEOW_EMBED_MODEL_CONFIG_JSON"
 
 
 def parse_args() -> argparse.Namespace:
@@ -13,10 +13,10 @@ def parse_args() -> argparse.Namespace:
         description="Run FastAPI and load dense/sparse models on startup. You could pass any uvicorn arguments to the command.",
         epilog=(
             "Examples:\n"
-            "  finite-embeddings --SentenceTransformer sergeyzh/BERTA --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1 --host 0.0.0.0 --port 8067\n"
-            '  finite-embeddings --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1 {"device":"cuda","max_active_dims":256}\n'
-            '  finite-embeddings --FlagReranker BAAI/bge-reranker-v2-m3 {"use_fp16":true}\n'
-            '  finite-embeddings --BGEM3FlagModel BAAI/bge-m3 {"use_fp16":true}\n'
+            "  meow-embed --SentenceTransformer sergeyzh/BERTA --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1 --host 0.0.0.0 --port 8067\n"
+            '  meow-embed --SparseEncoder opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1 {"device":"cuda","max_active_dims":256}\n'
+            '  meow-embed --FlagReranker BAAI/bge-reranker-v2-m3 {"use_fp16":true}\n'
+            '  meow-embed --BGEM3FlagModel BAAI/bge-m3 {"use_fp16":true}\n'
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -125,7 +125,7 @@ def _serialize_model_specs(
 
 
 def _load_model_config_from_env() -> Any:
-    from finite_embeddings import server
+    from meow_embed import server
 
     raw = os.environ.get(MODEL_CONFIG_ENV)
     if not raw:
@@ -157,7 +157,7 @@ def _load_model_config_from_env() -> Any:
 
 
 def uvicorn_app_factory() -> Any:
-    from finite_embeddings import server
+    from meow_embed import server
 
     return server.build_app(_load_model_config_from_env())
 
@@ -167,7 +167,7 @@ def main() -> None:
     model_specs, passthrough = parse_model_specs(sys.argv[1:])
     os.environ[MODEL_CONFIG_ENV] = _serialize_model_specs(model_specs)
 
-    uvicorn_args = ["finite_embeddings.cli:uvicorn_app_factory", "--factory"]
+    uvicorn_args = ["meow_embed.cli:uvicorn_app_factory", "--factory"]
     if not _has_option(passthrough, "--host"):
         uvicorn_args.extend(["--host", "0.0.0.0"])
     if not _has_option(passthrough, "--port"):

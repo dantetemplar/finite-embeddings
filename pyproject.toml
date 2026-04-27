@@ -1,5 +1,5 @@
 [project]
-name = "finite-embeddings"
+name = "meow-embed"
 version = "0.1.2"
 description = "FastAPI embedding server and async Python client for dense and sparse text embeddings."
 readme = "README.md"
@@ -34,7 +34,7 @@ all = [
 ]
 
 [project.scripts]
-finite-embeddings = "finite_embeddings.cli:main"
+meow-embed = "meow_embed.cli:main"
 
 [dependency-groups]
 dev = [

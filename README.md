@@ -1,9 +1,9 @@
-# finite-embeddings
+# meow-embed
 > FastAPI embedding server and Python client for dense and sparse text embeddings
 
 ## What is it?
 
-`finite-embeddings` is an HTTP API for text embeddings.
+`meow-embed` is an HTTP API for text embeddings.
 
 It can return **dense + sparse + BGE-M3 (dense, sparse, colbert) in one request**, with efficient transport:
 - vectors are encoded as `base64`
@@ -28,16 +28,16 @@ There is already [Infinity](https://github.com/michaelfeil/infinity), but this p
 Install with server extras from git:
 
 ```bash
-uv tool install "git+https://github.com/dantetemplar/finite-embeddings.git[server]"
+uv tool install "git+https://github.com/dantetemplar/meow-embed.git[server]"
 
 # if you don't have git installed you can use the zip file
-uv tool install "https://github.com/dantetemplar/finite-embeddings/archive/refs/heads/main.zip#egg=finite-embeddings[server]"
+uv tool install "https://github.com/dantetemplar/meow-embed/archive/refs/heads/main.zip#egg=meow-embed[server]"
 ```
 
 Run server and load models:
 
 ```bash
-finite-embeddings \
+meow-embed \
   --SentenceTransformer "sergeyzh/BERTA" \
   --SparseEncoder "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1" \
   --BGEM3FlagModel "BAAI/bge-m3" '{"use_fp16": true}' \
@@ -47,7 +47,7 @@ finite-embeddings \
 
 ...wait until server is ready (Uvicorn running on http://0.0.0.0:8067)...
 
-`finite-embeddings` handles only model flags (`--SentenceTransformer`, `--SparseEncoder`, `--FlagReranker`, `--BGEM3FlagModel`).
+`meow-embed` handles only model flags (`--SentenceTransformer`, `--SparseEncoder`, `--FlagReranker`, `--BGEM3FlagModel`).
 All other flags are passed directly to Uvicorn CLI parsing.
 
 Defaults (if not provided): `--host 0.0.0.0 --port 8067`.
@@ -55,7 +55,7 @@ Defaults (if not provided): `--host 0.0.0.0 --port 8067`.
 Example with extra Uvicorn options:
 
 ```bash
-finite-embeddings \
+meow-embed \
   --SentenceTransformer "sergeyzh/BERTA" \
   --reload \
   --log-level debug \
@@ -68,10 +68,10 @@ finite-embeddings \
 Install client extras from git:
 
 ```bash
-uv add "git+https://github.com/dantetemplar/finite-embeddings.git[client]"
+uv add "git+https://github.com/dantetemplar/meow-embed.git[client]"
 
 # if you don't have git installed you can use the zip file
-uv add "https://github.com/dantetemplar/finite-embeddings/archive/refs/heads/main.zip#egg=finite-embeddings[client]"
+uv add "https://github.com/dantetemplar/meow-embed/archive/refs/heads/main.zip#egg=meow-embed[client]"
 ```
 
 Example:
@@ -80,14 +80,14 @@ Example:
 import httpx
 import numpy as np
 
-from finite_embeddings.client import FiniteEmbeddingsClient
+from meow_embed.client import MeowEmbedClient
 
 
 def numpy_info(array: np.ndarray) -> str:
     return f"[ndarray] shape={array.shape}, dtype={array.dtype}"
 
 
-client = FiniteEmbeddingsClient(
+client = MeowEmbedClient(
     client=httpx.Client(base_url="http://127.0.0.1:8067"),
     aclient=httpx.AsyncClient(base_url="http://127.0.0.1:8067"), # NOTE: async version
 )
@@ -202,7 +202,7 @@ print(f"    .colbert: {numpy_info(one.bgeM3.colbert)}")
 
 ### Client-side LMDB cache
 
-Enable with `use_cache=True`. Embeddings are keyed per text and model options. Set `cache_path` to an LMDB directory (default `~/.cache/finite-embeddings/client-cache.lmdb`); optional `cache_map_size` sets the map size in bytes (default 2 GiB).
+Enable with `use_cache=True`. Embeddings are keyed per text and model options. Set `cache_path` to an LMDB directory (default `~/.cache/meow-embed/client-cache.lmdb`); optional `cache_map_size` sets the map size in bytes (default 2 GiB).
 
 ```python
 import tempfile
@@ -210,12 +210,12 @@ from pathlib import Path
 
 import httpx
 
-from finite_embeddings.client import DenseSparseEmbedRequestDict, FiniteEmbeddingsClient
+from meow_embed.client import DenseSparseEmbedRequestDict, MeowEmbedClient
 
 
 with tempfile.TemporaryDirectory() as tmp:
     cache_path = Path(tmp) / "embed-cache.lmdb"
-    client = FiniteEmbeddingsClient(
+    client = MeowEmbedClient(
         httpx.Client(base_url="http://127.0.0.1:8067"),
         use_cache=True,
         cache_path=cache_path,
@@ -318,13 +318,25 @@ Install as editable package with the `all` extra and the `dev` dependency group 
 uv pip install -e ".[all]" --group dev --extra-index-url https://download.pytorch.org/whl/cu126
 ```
 
-Run pytest:
+Run server:
+
 ```bash
-uv run -m pytest
+meow-embed \
+  --SentenceTransformer "sergeyzh/BERTA" \
+  --SparseEncoder "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1" \
+  --BGEM3FlagModel "BAAI/bge-m3" '{"use_fp16": true}' \
+  --FlagReranker "BAAI/bge-reranker-v2-m3" '{"use_fp16": true}' \
+  --host 0.0.0.0
+```
+
+Run pytest:
+
+```bash
+python -m pytest
 ```
 
 Run mypy tests:
 
 ```bash
-uv run -m mypy_test tests/
+python -m mypy_test tests/
 ```

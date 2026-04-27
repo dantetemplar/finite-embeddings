@@ -8,7 +8,7 @@ import httpx
 import numpy as np
 import pytest
 
-from finite_embeddings.client import (
+from meow_embed.client import (
     BGEM3Embeddings,
     BGEM3EmbedOneRequestDict,
     BGEM3EmbedRequestDict,
@@ -22,7 +22,7 @@ from finite_embeddings.client import (
     DenseSparseEmbedOneRequestDict,
     DenseSparseEmbedRequestDict,
     EmbedRequestAny,
-    FiniteEmbeddingsClient,
+    MeowEmbedClient,
     ParsedEmbedOneBGEM3,
     ParsedEmbedOneDense,
     ParsedEmbedOneDenseBGEM3,
@@ -97,7 +97,7 @@ def _fake_parsed_embed(payload: EmbedRequestAny) -> ParsedEmbedResponseVariant:
             colbert=[np.zeros((2, 2), dtype=np.float32) for _ in texts],
         )
 
-    return FiniteEmbeddingsClient._build_parsed_embed_response(
+    return MeowEmbedClient._build_parsed_embed_response(
         texts_count=n,
         dense=dense,
         sparse=sparse,
@@ -107,14 +107,14 @@ def _fake_parsed_embed(payload: EmbedRequestAny) -> ParsedEmbedResponseVariant:
     )
 
 
-class _EmbedHarnessClient(FiniteEmbeddingsClient):
+class _EmbedHarnessClient(MeowEmbedClient):
     def _embed_remote_sync(
         self, payload: EmbedRequestAny
     ) -> ParsedEmbedResponseVariant:
         return _fake_parsed_embed(payload)
 
 
-class _AEmbedHarnessClient(FiniteEmbeddingsClient):
+class _AEmbedHarnessClient(MeowEmbedClient):
     async def _embed_remote(
         self, payload: EmbedRequestAny
     ) -> ParsedEmbedResponseVariant:
@@ -394,7 +394,7 @@ async def test_aembed_one_raises_when_text_missing() -> None:
 
 def test_client_requires_http_client() -> None:
     with pytest.raises(ValueError, match="client or aclient"):
-        FiniteEmbeddingsClient()
+        MeowEmbedClient()
 
 
 def test_embed_raises_when_texts_missing_or_empty() -> None:
