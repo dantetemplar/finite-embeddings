@@ -87,11 +87,11 @@ def numpy_info(array: np.ndarray) -> str:
     return f"[ndarray] shape={array.shape}, dtype={array.dtype}"
 
 
-client = MeowEmbedClient(
+meow = MeowEmbedClient(
     client=httpx.Client(base_url="http://127.0.0.1:8067"),
     aclient=httpx.AsyncClient(base_url="http://127.0.0.1:8067"), # NOTE: async version
 )
-models = client.models() # NOTE: async version is await client.amodels()
+models = meow.models() # NOTE: async version is await meow.amodels()
 print(models)
 # { 'models': [
 #   {
@@ -112,14 +112,14 @@ print(models)
 #     'id': 'BAAI/bge-m3',
 #     'type': 'bgeM3'}]}
 
-result = client.embed(
+result = meow.embed(
     {
         "texts": ["hello world", "one request for both outputs"],
         "dense_model_id": "sergeyzh/BERTA",
         "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
         "bge_model_id": "BAAI/bge-m3",
     }
-) # NOTE: async version is await client.aembed(...)
+) # NOTE: async version is await meow.aembed(...)
 print("======== embed ========")
 print(f"texts_count: {result.texts_count}")
 
@@ -160,14 +160,14 @@ print(f"        .[0]: {numpy_info(result.bgeM3.colbert[0])}")
 
 
 # Single text: use embed_one / aembed_one for a 1D dense vector (no .vectors[0]).
-one = client.embed_one(
+one = meow.embed_one(
     {
         "text": "hello world",
         "dense_model_id": "sergeyzh/BERTA",
         "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
         "bge_model_id": "BAAI/bge-m3",
     }
-) # NOTE: async version is await client.aembed_one(...)
+) # NOTE: async version is await meow.aembed_one(...)
 assert one.dense.vector.shape == (768,)
 print("======== embed one ========")
 print("dense")
@@ -211,7 +211,7 @@ import httpx
 
 from meow_embed import MeowEmbedClient
 
-client = MeowEmbedClient(
+meow = MeowEmbedClient(
     client=httpx.Client(base_url="http://127.0.0.1:8067"),
     use_cache=True,  # auto-creates EmbedCache at ~/.cache/meow-embed/client-cache.lmdb
 )
@@ -231,7 +231,7 @@ with tempfile.TemporaryDirectory() as tmp:
     cache_path = Path(tmp) / "embed-cache.lmdb"
     cache = EmbedCache.open(cache_path)
     try:
-        client = MeowEmbedClient(
+        meow = MeowEmbedClient(
             httpx.Client(base_url="http://127.0.0.1:8067"),
             cache=cache,
         )
@@ -240,8 +240,8 @@ with tempfile.TemporaryDirectory() as tmp:
             "dense_model_id": "sergeyzh/BERTA",
             "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
         }
-        client.embed(payload)  # fills LMDB on miss
-        client.embed(payload)  # reads from LMDB
+        meow.embed(payload)  # fills LMDB on miss
+        meow.embed(payload)  # reads from LMDB
     finally:
         cache.close()
 ```

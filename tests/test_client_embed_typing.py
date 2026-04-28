@@ -131,9 +131,9 @@ def _async_harness() -> _AEmbedHarnessClient:
 
 
 def test_embed_dense_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: DenseEmbedRequestDict = {"texts": ["a"], "dense_model_id": "d"}
-    r = client.embed(payload, use_cache=False)
+    r = meow.embed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseDense)
     assert r.dense.vectors.shape == (1, 2)
 
@@ -144,9 +144,9 @@ def test_embed_dense_sync_types() -> None:
 
 
 def test_embed_sparse_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: SparseEmbedRequestDict = {"texts": ["a"], "sparse_model_id": "s"}
-    r = client.embed(payload, use_cache=False)
+    r = meow.embed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseSparse)
     assert r.sparse.items[0].dim == 4
 
@@ -157,9 +157,9 @@ def test_embed_sparse_sync_types() -> None:
 
 
 def test_embed_bge_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: BGEM3EmbedRequestDict = {"texts": ["a"], "bge_model_id": "b"}
-    r = client.embed(payload, use_cache=False)
+    r = meow.embed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseBGEM3)
     assert r.bgeM3.colbert[0].shape == (2, 2)
 
@@ -170,13 +170,13 @@ def test_embed_bge_sync_types() -> None:
 
 
 def test_embed_dense_sparse_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: DenseSparseEmbedRequestDict = {
         "texts": ["a"],
         "dense_model_id": "d",
         "sparse_model_id": "s",
     }
-    r = client.embed(payload, use_cache=False)
+    r = meow.embed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseDenseSparse)
     assert r.dense.model_id == "d"
     assert r.sparse.model_id == "s"
@@ -186,13 +186,13 @@ def test_embed_dense_sparse_sync_types() -> None:
 
 
 def test_embed_dense_bge_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: DenseBGEM3EmbedRequestDict = {
         "texts": ["a"],
         "dense_model_id": "d",
         "bge_model_id": "b",
     }
-    r = client.embed(payload, use_cache=False)
+    r = meow.embed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseDenseBGEM3)
 
     with pytest.raises(AttributeError):
@@ -200,13 +200,13 @@ def test_embed_dense_bge_sync_types() -> None:
 
 
 def test_embed_sparse_bge_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: SparseBGEM3EmbedRequestDict = {
         "texts": ["a"],
         "sparse_model_id": "s",
         "bge_model_id": "b",
     }
-    r = client.embed(payload, use_cache=False)
+    r = meow.embed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseSparseBGEM3)
 
     with pytest.raises(AttributeError):
@@ -214,21 +214,21 @@ def test_embed_sparse_bge_sync_types() -> None:
 
 
 def test_embed_all_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: DenseSparseBGEM3EmbedRequestDict = {
         "texts": ["a"],
         "dense_model_id": "d",
         "sparse_model_id": "s",
         "bge_model_id": "b",
     }
-    r = client.embed(payload, use_cache=False)
+    r = meow.embed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseDenseSparseBGEM3)
 
 
 def test_embed_one_dense_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: DenseEmbedOneRequestDict = {"text": "a", "dense_model_id": "d"}
-    r = client.embed_one(payload, use_cache=False)
+    r = meow.embed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneDense)
     assert r.dense.vector.shape == (2,)
 
@@ -239,9 +239,9 @@ def test_embed_one_dense_sync_types() -> None:
 
 
 def test_embed_one_sparse_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: SparseEmbedOneRequestDict = {"text": "a", "sparse_model_id": "s"}
-    r = client.embed_one(payload, use_cache=False)
+    r = meow.embed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneSparse)
     assert r.sparse.item.dim == 4
 
@@ -252,9 +252,9 @@ def test_embed_one_sparse_sync_types() -> None:
 
 
 def test_embed_one_bge_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: BGEM3EmbedOneRequestDict = {"text": "a", "bge_model_id": "b"}
-    r = client.embed_one(payload, use_cache=False)
+    r = meow.embed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneBGEM3)
     assert r.bgeM3.colbert.shape == (2, 2)
 
@@ -265,13 +265,13 @@ def test_embed_one_bge_sync_types() -> None:
 
 
 def test_embed_one_dense_sparse_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: DenseSparseEmbedOneRequestDict = {
         "text": "a",
         "dense_model_id": "d",
         "sparse_model_id": "s",
     }
-    r = client.embed_one(payload, use_cache=False)
+    r = meow.embed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneDenseSparse)
     assert r.dense.model_id == "d"
     assert r.sparse.model_id == "s"
@@ -281,13 +281,13 @@ def test_embed_one_dense_sparse_sync_types() -> None:
 
 
 def test_embed_one_dense_bge_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: DenseBGEM3EmbedOneRequestDict = {
         "text": "a",
         "dense_model_id": "d",
         "bge_model_id": "b",
     }
-    r = client.embed_one(payload, use_cache=False)
+    r = meow.embed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneDenseBGEM3)
 
     with pytest.raises(AttributeError):
@@ -295,13 +295,13 @@ def test_embed_one_dense_bge_sync_types() -> None:
 
 
 def test_embed_one_sparse_bge_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: SparseBGEM3EmbedOneRequestDict = {
         "text": "a",
         "sparse_model_id": "s",
         "bge_model_id": "b",
     }
-    r = client.embed_one(payload, use_cache=False)
+    r = meow.embed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneSparseBGEM3)
 
     with pytest.raises(AttributeError):
@@ -309,22 +309,22 @@ def test_embed_one_sparse_bge_sync_types() -> None:
 
 
 def test_embed_one_all_sync_types() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     payload: DenseSparseBGEM3EmbedOneRequestDict = {
         "text": "a",
         "dense_model_id": "d",
         "sparse_model_id": "s",
         "bge_model_id": "b",
     }
-    r = client.embed_one(payload, use_cache=False)
+    r = meow.embed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneDenseSparseBGEM3)
 
 
 @pytest.mark.anyio
 async def test_aembed_dense_types() -> None:
-    client = _async_harness()
+    meow = _async_harness()
     payload: DenseEmbedRequestDict = {"texts": ["a"], "dense_model_id": "d"}
-    r = await client.aembed(payload, use_cache=False)
+    r = await meow.aembed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseDense)
 
     with pytest.raises(AttributeError):
@@ -335,13 +335,13 @@ async def test_aembed_dense_types() -> None:
 
 @pytest.mark.anyio
 async def test_aembed_dense_sparse_types() -> None:
-    client = _async_harness()
+    meow = _async_harness()
     payload: DenseSparseEmbedRequestDict = {
         "texts": ["a"],
         "dense_model_id": "d",
         "sparse_model_id": "s",
     }
-    r = await client.aembed(payload, use_cache=False)
+    r = await meow.aembed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseDenseSparse)
 
     with pytest.raises(AttributeError):
@@ -350,9 +350,9 @@ async def test_aembed_dense_sparse_types() -> None:
 
 @pytest.mark.anyio
 async def test_aembed_one_dense_types() -> None:
-    client = _async_harness()
+    meow = _async_harness()
     payload: DenseEmbedOneRequestDict = {"text": "a", "dense_model_id": "d"}
-    r = await client.aembed_one(payload, use_cache=False)
+    r = await meow.aembed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneDense)
 
     with pytest.raises(AttributeError):
@@ -363,13 +363,13 @@ async def test_aembed_one_dense_types() -> None:
 
 @pytest.mark.anyio
 async def test_aembed_one_dense_sparse_types() -> None:
-    client = _async_harness()
+    meow = _async_harness()
     payload: DenseSparseEmbedOneRequestDict = {
         "text": "a",
         "dense_model_id": "d",
         "sparse_model_id": "s",
     }
-    r = await client.aembed_one(payload, use_cache=False)
+    r = await meow.aembed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneDenseSparse)
 
     with pytest.raises(AttributeError):
@@ -377,16 +377,16 @@ async def test_aembed_one_dense_sparse_types() -> None:
 
 
 def test_embed_one_raises_when_text_missing() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     with pytest.raises(ValueError, match="text must be provided"):
-        client.embed_one(cast(Any, {"dense_model_id": "d"}), use_cache=False)
+        meow.embed_one(cast(Any, {"dense_model_id": "d"}), use_cache=False)
 
 
 @pytest.mark.anyio
 async def test_aembed_one_raises_when_text_missing() -> None:
-    client = _async_harness()
+    meow = _async_harness()
     with pytest.raises(ValueError, match="text must be provided"):
-        await client.aembed_one(cast(Any, {"dense_model_id": "d"}), use_cache=False)
+        await meow.aembed_one(cast(Any, {"dense_model_id": "d"}), use_cache=False)
 
 
 def test_client_requires_http_client() -> None:
@@ -395,30 +395,30 @@ def test_client_requires_http_client() -> None:
 
 
 def test_embed_raises_when_texts_missing_or_empty() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     with pytest.raises(ValueError, match="At least one text must be provided"):
-        client.embed(cast(Any, {"dense_model_id": "d"}), use_cache=False)
+        meow.embed(cast(Any, {"dense_model_id": "d"}), use_cache=False)
     with pytest.raises(ValueError, match="At least one text must be provided"):
-        client.embed(cast(Any, {"texts": [], "dense_model_id": "d"}), use_cache=False)
+        meow.embed(cast(Any, {"texts": [], "dense_model_id": "d"}), use_cache=False)
 
 
 def test_embed_raises_when_no_model_ids() -> None:
-    client = _sync_harness()
+    meow = _sync_harness()
     with pytest.raises(ValueError, match="At least one model must be provided"):
-        client.embed(cast(Any, {"texts": ["a"]}), use_cache=False)
+        meow.embed(cast(Any, {"texts": ["a"]}), use_cache=False)
 
 
 @pytest.mark.anyio
 async def test_aembed_raises_when_texts_empty() -> None:
-    client = _async_harness()
+    meow = _async_harness()
     with pytest.raises(ValueError, match="At least one text must be provided"):
-        await client.aembed(
+        await meow.aembed(
             cast(Any, {"texts": [], "dense_model_id": "d"}), use_cache=False
         )
 
 
 @pytest.mark.anyio
 async def test_aembed_raises_when_no_models() -> None:
-    client = _async_harness()
+    meow = _async_harness()
     with pytest.raises(ValueError, match="At least one model must be provided"):
-        await client.aembed(cast(Any, {"texts": ["a"]}), use_cache=False)
+        await meow.aembed(cast(Any, {"texts": ["a"]}), use_cache=False)

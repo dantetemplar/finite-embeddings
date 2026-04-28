@@ -22,9 +22,9 @@ from meow_embed.types import (
 async def test_client_models_and_embed_live_server() -> None:
     base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = MeowEmbedClient(aclient=httpx_aclient)
+        meow = MeowEmbedClient(aclient=httpx_aclient)
 
-        models = await client.amodels()
+        models = await meow.amodels()
         assert "models" in models
         assert len(models["models"]) > 0
 
@@ -37,7 +37,7 @@ async def test_client_models_and_embed_live_server() -> None:
         assert dense_model_id in available_model_ids
         assert sparse_model_id in available_model_ids
 
-        result = await client.aembed(
+        result = await meow.aembed(
             {
                 "texts": ["hello world", "server integration test"],
                 "dense_model_id": dense_model_id,
@@ -61,9 +61,9 @@ async def test_client_models_and_embed_live_server() -> None:
 async def test_client_aembed_one_live_server() -> None:
     base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = MeowEmbedClient(aclient=httpx_aclient)
+        meow = MeowEmbedClient(aclient=httpx_aclient)
 
-        models = await client.amodels()
+        models = await meow.amodels()
         available_model_ids = {model["id"] for model in models["models"]}
         dense_model_id = "sergeyzh/BERTA"
         sparse_model_id = (
@@ -73,7 +73,7 @@ async def test_client_aembed_one_live_server() -> None:
         assert dense_model_id in available_model_ids
         assert sparse_model_id in available_model_ids
 
-        one = await client.aembed_one(
+        one = await meow.aembed_one(
             {
                 "text": "single string embed_one",
                 "dense_model_id": dense_model_id,
@@ -103,9 +103,9 @@ async def test_client_embed_cache_hit_skips_remote(
     cache = EmbedCache.open(tmp_path / "client-cache.lmdb")
     try:
         async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-            client = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
+            meow = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
 
-            first = await client.aembed(payload)
+            first = await meow.aembed(payload)
             assert isinstance(first, ParsedEmbedResponseDenseSparse)
 
             async def _fail_if_remote_called(payload_arg: object) -> object:
@@ -113,8 +113,8 @@ async def test_client_embed_cache_hit_skips_remote(
                     f"Expected cache hit, but remote was called with: {payload_arg}"
                 )
 
-            monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
-            second = await client.aembed(payload)
+            monkeypatch.setattr(meow, "_embed_remote", _fail_if_remote_called)
+            second = await meow.aembed(payload)
             assert isinstance(second, ParsedEmbedResponseDenseSparse)
 
             assert second.texts_count == first.texts_count
@@ -146,10 +146,10 @@ async def test_client_accepts_external_lmdb_environment(
         cache = EmbedCache(env=cache_env)
         base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
         async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-            client = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
-            assert client.cache is cache
-            assert client.cache is not None
-            assert client.cache.env is cache_env
+            meow = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
+            assert meow.cache is cache
+            assert meow.cache is not None
+            assert meow.cache.env is cache_env
     finally:
         cache_env.close()
 
@@ -159,15 +159,15 @@ async def test_client_rerank_live_server() -> None:
     base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     reranker_model_id = "BAAI/bge-reranker-v2-m3"
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = MeowEmbedClient(aclient=httpx_aclient)
-        models = await client.amodels()
+        meow = MeowEmbedClient(aclient=httpx_aclient)
+        models = await meow.amodels()
         available_model_ids = {
             model["id"] for model in models["models"] if model["type"] == "reranker"
         }
         if reranker_model_id not in available_model_ids:
             pytest.skip(f"{reranker_model_id} is not loaded on server")
 
-        reranked = await client.arerank(
+        reranked = await meow.arerank(
             {
                 "reranker_model_id": reranker_model_id,
                 "queries": ["what is panda?", "capital of france"],
@@ -190,8 +190,8 @@ async def test_client_embed_bge_m3_live_server() -> None:
     base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     bge_model_id = "BAAI/bge-m3"
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = MeowEmbedClient(aclient=httpx_aclient)
-        models = await client.amodels()
+        meow = MeowEmbedClient(aclient=httpx_aclient)
+        models = await meow.amodels()
         bge_models = [model for model in models["models"] if model["type"] == "bgeM3"]
         available_model_ids = {
             model["id"] for model in models["models"] if model["type"] == "bgeM3"
@@ -220,7 +220,7 @@ async def test_client_embed_bge_m3_live_server() -> None:
         assert raw_payload["bgeM3"]["sparse"]["model_id"] == bge_model_id
         assert len(raw_payload["bgeM3"]["colbert"]) == 2
 
-        parsed = await client.aembed(
+        parsed = await meow.aembed(
             {
                 "texts": ["What is BGE M3?", "Definition of BM25"],
                 "bge_model_id": bge_model_id,
@@ -248,15 +248,15 @@ async def test_client_embed_bge_m3_cache_hit_skips_remote(
     cache = EmbedCache.open(tmp_path / "client-cache.lmdb")
     try:
         async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-            client = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
-            models = await client.amodels()
+            meow = MeowEmbedClient(aclient=httpx_aclient, cache=cache)
+            models = await meow.amodels()
             available_model_ids = {
                 model["id"] for model in models["models"] if model["type"] == "bgeM3"
             }
             if bge_model_id not in available_model_ids:
                 pytest.skip(f"{bge_model_id} is not loaded on server")
 
-            first = await client.aembed(payload)
+            first = await meow.aembed(payload)
             assert isinstance(first, ParsedEmbedResponseBGEM3)
 
             async def _fail_if_remote_called(payload_arg: object) -> object:
@@ -264,8 +264,8 @@ async def test_client_embed_bge_m3_cache_hit_skips_remote(
                     f"Expected cache hit, but remote was called with: {payload_arg}"
                 )
 
-            monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
-            second = await client.aembed(payload)
+            monkeypatch.setattr(meow, "_embed_remote", _fail_if_remote_called)
+            second = await meow.aembed(payload)
             assert isinstance(second, ParsedEmbedResponseBGEM3)
             assert np.array_equal(first.bgeM3.dense.vectors, second.bgeM3.dense.vectors)
             assert len(first.bgeM3.sparse.items) == len(second.bgeM3.sparse.items)
@@ -288,9 +288,9 @@ async def test_client_embed_bge_m3_cache_hit_skips_remote(
 async def test_sync_api_requires_sync_client() -> None:
     base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
-        client = MeowEmbedClient(aclient=httpx_aclient)
+        meow = MeowEmbedClient(aclient=httpx_aclient)
         with pytest.raises(RuntimeError, match="client is not configured"):
-            client.models()
+            meow.models()
 
 
 @pytest.mark.anyio
@@ -302,9 +302,9 @@ async def test_client_models_and_embed_sync_live_server() -> None:
     )
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
         with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
+            meow = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
 
-            models = client.models()
+            models = meow.models()
             assert "models" in models
             assert len(models["models"]) > 0
 
@@ -312,7 +312,7 @@ async def test_client_models_and_embed_sync_live_server() -> None:
             assert dense_model_id in available_model_ids
             assert sparse_model_id in available_model_ids
 
-            result = client.embed(
+            result = meow.embed(
                 {
                     "texts": ["hello world", "server integration test"],
                     "dense_model_id": dense_model_id,
@@ -354,13 +354,13 @@ async def test_client_embed_sync_cache_hit_skips_remote(
     try:
         async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
             with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-                client = MeowEmbedClient(
+                meow = MeowEmbedClient(
                     sync_httpx_aclient,
                     httpx_aclient,
                     cache=cache,
                 )
 
-                first = client.embed(payload)
+                first = meow.embed(payload)
                 assert isinstance(first, ParsedEmbedResponseDenseSparse)
 
                 def _fail_if_remote_called(payload_arg: object) -> object:
@@ -368,9 +368,9 @@ async def test_client_embed_sync_cache_hit_skips_remote(
                         f"Expected cache hit, but remote was called with: {payload_arg}"
                     )
 
-                    monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
+                    monkeypatch.setattr(meow, "_embed_remote", _fail_if_remote_called)
 
-                second = client.embed(payload)
+                second = meow.embed(payload)
                 assert isinstance(second, ParsedEmbedResponseDenseSparse)
 
                 assert second.texts_count == first.texts_count
@@ -395,15 +395,15 @@ async def test_client_sync_rerank_live_server() -> None:
     reranker_model_id = "BAAI/bge-reranker-v2-m3"
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
         with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
-            models = client.models()
+            meow = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
+            models = meow.models()
             available_model_ids = {
                 model["id"] for model in models["models"] if model["type"] == "reranker"
             }
             if reranker_model_id not in available_model_ids:
                 pytest.skip(f"{reranker_model_id} is not loaded on server")
 
-            reranked = client.rerank(
+            reranked = meow.rerank(
                 {
                     "reranker_model_id": reranker_model_id,
                     "queries": ["what is panda?", "capital of france"],
@@ -427,15 +427,15 @@ async def test_client_embed_bge_m3_sync_live_server() -> None:
     bge_model_id = "BAAI/bge-m3"
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
         with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-            client = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
-            models = client.models()
+            meow = MeowEmbedClient(sync_httpx_aclient, httpx_aclient)
+            models = meow.models()
             available_model_ids = {
                 model["id"] for model in models["models"] if model["type"] == "bgeM3"
             }
             if bge_model_id not in available_model_ids:
                 pytest.skip(f"{bge_model_id} is not loaded on server")
 
-            parsed = client.embed(
+            parsed = meow.embed(
                 {
                     "texts": ["What is BGE M3?", "Definition of BM25"],
                     "bge_model_id": bge_model_id,
@@ -464,12 +464,12 @@ async def test_client_embed_bge_m3_sync_cache_hit_skips_remote(
     try:
         async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as httpx_aclient:
             with httpx.Client(base_url=base_url, timeout=30.0) as sync_httpx_aclient:
-                client = MeowEmbedClient(
+                meow = MeowEmbedClient(
                     sync_httpx_aclient,
                     httpx_aclient,
                     cache=cache,
                 )
-                models = client.models()
+                models = meow.models()
                 available_model_ids = {
                     model["id"]
                     for model in models["models"]
@@ -478,7 +478,7 @@ async def test_client_embed_bge_m3_sync_cache_hit_skips_remote(
                 if bge_model_id not in available_model_ids:
                     pytest.skip(f"{bge_model_id} is not loaded on server")
 
-                first = client.embed(payload)
+                first = meow.embed(payload)
                 assert isinstance(first, ParsedEmbedResponseBGEM3)
 
                 def _fail_if_remote_called(payload_arg: object) -> object:
@@ -486,9 +486,9 @@ async def test_client_embed_bge_m3_sync_cache_hit_skips_remote(
                         f"Expected cache hit, but remote was called with: {payload_arg}"
                     )
 
-                    monkeypatch.setattr(client, "_embed_remote", _fail_if_remote_called)
+                    monkeypatch.setattr(meow, "_embed_remote", _fail_if_remote_called)
 
-                second = client.embed(payload)
+                second = meow.embed(payload)
                 assert isinstance(second, ParsedEmbedResponseBGEM3)
                 assert np.array_equal(
                     first.bgeM3.dense.vectors, second.bgeM3.dense.vectors
