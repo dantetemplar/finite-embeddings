@@ -22,6 +22,8 @@ from sentence_transformers.sparse_encoder import SparseEncoder
 
 from meow_embed import __description__, __version__
 
+logger = logging.getLogger("uvicorn.error")
+
 
 @dataclass(slots=True)
 class ModelInstanceConfig:
@@ -413,12 +415,12 @@ def build_app(config: ModelConfig) -> FastAPI:
                 finally:
                     ctx = timing_context.get()
                     if ctx is not None:
-                        logging.info(
+                        logger.info(
                             "Timing context:\n%s",
                             ctx.as_dict()["pretty"].replace("\t", "\n"),
                         )
                     else:
-                        logging.info("No timing context")
+                        logger.info("No timing context")
                     timing_context.reset(context_token)
 
             return custom_route_handler
@@ -430,7 +432,11 @@ def build_app(config: ModelConfig) -> FastAPI:
         app.state.reranker_models = {}
         app.state.bge_m3_models = {}
 
+        startup_started_at = time.monotonic()
+        logger.info("Loading %d model(s)...", len(config.models))
         for model in config.models:
+            model_load_started_at = time.monotonic()
+            logger.info("Loading %s model: %s", model.type, model.model_id)
             if model.type == "dense":
                 app.state.dense_models[model.model_id] = SentenceTransformer(
                     model.model_id, **model.kwargs
@@ -447,6 +453,17 @@ def build_app(config: ModelConfig) -> FastAPI:
                 app.state.bge_m3_models[model.model_id] = BGEM3FlagModel(
                     model.model_id, **model.kwargs
                 )
+            logger.info(
+                "Loaded %s model: %s in %.1fs",
+                model.type,
+                model.model_id,
+                time.monotonic() - model_load_started_at,
+            )
+        logger.info(
+            "Startup complete. Loaded %d model(s) in %.1fs.",
+            len(config.models),
+            time.monotonic() - startup_started_at,
+        )
 
         yield
 
@@ -535,7 +552,7 @@ def build_app(config: ModelConfig) -> FastAPI:
             ),
         ],
     ) -> EmbedResponse:
-        logging.info("Embed request: %s", repr(embed_request))
+        logger.info("Embed request: %s", repr(embed_request))
         if (
             embed_request.dense_model_id is None
             and embed_request.sparse_model_id is None

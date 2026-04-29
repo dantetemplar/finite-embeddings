@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import gzip
 import json
+import time
+from contextvars import ContextVar
 from typing import cast, overload
 
 import httpx
@@ -11,8 +13,56 @@ import meow_embed.types as t
 from meow_embed.cache import EmbedCache, EmbedCacheProgress
 from meow_embed.parsing import decode_embed_response
 
+timing_timeline = ContextVar[dict[str, float] | None]("timing_timeline", default=None)
+
 
 class MeowEmbedClient:
+    @staticmethod
+    def _current_timeline_ts(timings: dict[str, float]) -> float:
+        if not timings:
+            return 0.0
+        last_key = next(reversed(timings))
+        return timings[last_key]
+
+    @classmethod
+    def _append_timeline_timestamp(
+        cls, key: str, timestamp: float | None = None
+    ) -> None:
+        timings = timing_timeline.get()
+        if timings is None:
+            return
+        timings[key] = time.perf_counter() if timestamp is None else timestamp
+
+    @staticmethod
+    def _timeline_snapshot() -> dict[str, float]:
+        timings = timing_timeline.get()
+        return {} if timings is None else dict(timings)
+
+    @staticmethod
+    def _parse_server_timings(headers: httpx.Headers) -> dict[str, float] | None:
+        raw_header = headers.get("X-Timing-Context-Raw")
+        if not raw_header:
+            return None
+        try:
+            parsed = json.loads(raw_header)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        points = [(k, v) for k, v in parsed.items() if isinstance(v, (int, float))]
+        if not points:
+            return None
+        return {f"{key}_ms": float(value) * 1000.0 for key, value in points}
+
+    @staticmethod
+    def _server_total_ms(server_timings: dict[str, float] | None) -> float | None:
+        if not server_timings:
+            return None
+        values = list(server_timings.values())
+        if not values:
+            return None
+        return max(0.0, values[-1] - values[0])
+
     def __init__(
         self,
         client: httpx.Client | None = None,
@@ -103,26 +153,53 @@ class MeowEmbedClient:
     def embed(
         self, payload: t.EmbedRequestPayload, *, use_cache: bool | None = None
     ) -> t.ParsedEmbedResponseVariant:
-        self._validate_embed_payload(payload)
+        timeline_token = timing_timeline.set({})
+        try:
+            self._validate_embed_payload(payload)
+            self._append_timeline_timestamp("payload_validate_ms")
 
-        should_use_cache = (self._cache is not None) if use_cache is None else use_cache
-        if not should_use_cache or self._cache is None:
-            return self._embed_remote(payload)
-
-        prepared = self._cache.prepare(payload)
-        if prepared.misses:
-            remote = self._embed_remote(self._payload_for_missing_in_cache(prepared))
-            if remote.texts_count != len(prepared.misses):
-                raise ValueError(
-                    "Cache merge failed: mismatch in misses and returned items."
+            should_use_cache = (
+                (self._cache is not None) if use_cache is None else use_cache
+            )
+            if not should_use_cache or self._cache is None:
+                parsed = self._embed_remote(payload)
+                parsed.client_timings["embed_total_ms"] = self._current_timeline_ts(
+                    parsed.client_timings
                 )
-            self._cache.merge_remote(prepared, remote)
-        return self._cache.finalize(prepared)
+                return parsed
+
+            prepared = self._cache.prepare(payload)
+            self._append_timeline_timestamp("cache_prepare_ms")
+            server_timings: dict[str, float] | None = None
+            if prepared.misses:
+                miss_payload = self._payload_for_missing_in_cache(prepared)
+                self._append_timeline_timestamp("missing_payload_build_ms")
+                remote = self._embed_remote(miss_payload)
+                server_timings = remote.server_timings
+                if remote.texts_count != len(prepared.misses):
+                    raise ValueError(
+                        "Cache merge failed: mismatch in misses and returned items."
+                    )
+                self._cache.merge_remote(prepared, remote)
+                self._append_timeline_timestamp("cache_merge_remote_ms")
+            parsed = self._cache.finalize(prepared)
+            parsed.server_timings = server_timings
+            parsed.client_timings = self._timeline_snapshot()
+            self._append_timeline_timestamp("cache_finalize_ms")
+            parsed.client_timings = self._timeline_snapshot()
+            parsed.client_timings["embed_total_ms"] = self._current_timeline_ts(
+                parsed.client_timings
+            )
+            return parsed
+        finally:
+            timing_timeline.reset(timeline_token)
 
     def _embed_remote(
-        self, payload: t.EmbedRequestPayload
+        self,
+        payload: t.EmbedRequestPayload,
     ) -> t.ParsedEmbedResponseVariant:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
+        self._append_timeline_timestamp("payload_compress_ms")
         response = self.client.post(
             "/embed",
             content=gzipped_payload,
@@ -132,9 +209,20 @@ class MeowEmbedClient:
                 "Content-Encoding": "gzip",
             },
         )
+        self._append_timeline_timestamp("remote_request_ms")
         response.raise_for_status()
+        server_timings = self._parse_server_timings(response.headers)
         raw = cast(t.EmbedResponseDict, response.json())
-        return decode_embed_response(raw, payload)
+        self._append_timeline_timestamp("remote_json_decode_ms")
+        parsed = decode_embed_response(
+            raw,
+            payload,
+            server_timings=server_timings,
+            client_timings=self._timeline_snapshot(),
+        )
+        self._append_timeline_timestamp("response_parse_ms")
+        parsed.client_timings = self._timeline_snapshot()
+        return parsed
 
     @classmethod
     def _validate_embed_payload(cls, payload: t.EmbedRequestPayload) -> None:
@@ -195,28 +283,53 @@ class MeowEmbedClient:
     async def aembed(
         self, payload: t.EmbedRequestPayload, *, use_cache: bool | None = None
     ) -> t.ParsedEmbedResponseVariant:
-        self._validate_embed_payload(payload)
+        timeline_token = timing_timeline.set({})
+        try:
+            self._validate_embed_payload(payload)
+            self._append_timeline_timestamp("payload_validate_ms")
 
-        should_use_cache = (self._cache is not None) if use_cache is None else use_cache
-        if not should_use_cache or self._cache is None:
-            return await self._aembed_remote(payload)
-
-        prepared = self._cache.prepare(payload)
-        if prepared.misses:
-            remote = await self._aembed_remote(
-                self._payload_for_missing_in_cache(prepared)
+            should_use_cache = (
+                (self._cache is not None) if use_cache is None else use_cache
             )
-            if remote.texts_count != len(prepared.misses):
-                raise ValueError(
-                    "Cache merge failed: mismatch in misses and returned items."
+            if not should_use_cache or self._cache is None:
+                parsed = await self._aembed_remote(payload)
+                parsed.client_timings["aembed_total_ms"] = self._current_timeline_ts(
+                    parsed.client_timings
                 )
-            self._cache.merge_remote(prepared, remote)
-        return self._cache.finalize(prepared)
+                return parsed
+
+            prepared = self._cache.prepare(payload)
+            self._append_timeline_timestamp("cache_prepare_ms")
+            server_timings: dict[str, float] | None = None
+            if prepared.misses:
+                miss_payload = self._payload_for_missing_in_cache(prepared)
+                self._append_timeline_timestamp("missing_payload_build_ms")
+                remote = await self._aembed_remote(miss_payload)
+                server_timings = remote.server_timings
+                if remote.texts_count != len(prepared.misses):
+                    raise ValueError(
+                        "Cache merge failed: mismatch in misses and returned items."
+                    )
+                self._cache.merge_remote(prepared, remote)
+                self._append_timeline_timestamp("cache_merge_remote_ms")
+            parsed = self._cache.finalize(prepared)
+            parsed.server_timings = server_timings
+            parsed.client_timings = self._timeline_snapshot()
+            self._append_timeline_timestamp("cache_finalize_ms")
+            parsed.client_timings = self._timeline_snapshot()
+            parsed.client_timings["aembed_total_ms"] = self._current_timeline_ts(
+                parsed.client_timings
+            )
+            return parsed
+        finally:
+            timing_timeline.reset(timeline_token)
 
     async def _aembed_remote(
-        self, payload: t.EmbedRequestPayload
+        self,
+        payload: t.EmbedRequestPayload,
     ) -> t.ParsedEmbedResponseVariant:
         gzipped_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
+        self._append_timeline_timestamp("payload_compress_ms")
         response = await self.aclient.post(
             "/embed",
             content=gzipped_payload,
@@ -226,9 +339,20 @@ class MeowEmbedClient:
                 "Content-Encoding": "gzip",
             },
         )
+        self._append_timeline_timestamp("remote_request_ms")
         response.raise_for_status()
+        server_timings = self._parse_server_timings(response.headers)
         raw = cast(t.EmbedResponseDict, response.json())
-        return decode_embed_response(raw, payload)
+        self._append_timeline_timestamp("remote_json_decode_ms")
+        parsed = decode_embed_response(
+            raw,
+            payload,
+            server_timings=server_timings,
+            client_timings=self._timeline_snapshot(),
+        )
+        self._append_timeline_timestamp("response_parse_ms")
+        parsed.client_timings = self._timeline_snapshot()
+        return parsed
 
     @overload
     def embed_one(
@@ -350,6 +474,11 @@ class MeowEmbedClient:
     def _parsed_embed_batch_to_one(
         cls, response: t.ParsedEmbedResponseVariant
     ) -> t.ParsedEmbedOneVariant:
+        common_kwargs = {
+            "server_timings": response.server_timings,
+            "client_timings": dict(response.client_timings),
+        }
+
         def _dense_emb_to_vector(dense: t.DenseEmbeddings) -> t.DenseEmbeddingVector:
             if dense.vectors.shape[0] != 1:
                 raise ValueError(
@@ -392,31 +521,41 @@ class MeowEmbedClient:
             raise ValueError("embed_one requires texts_count == 1.")
         if isinstance(response, t.ParsedEmbedResponseDenseSparseBGEM3):
             return t.ParsedEmbedOneDenseSparseBGEM3(
+                **common_kwargs,
                 dense=_dense_emb_to_vector(response.dense),
                 sparse=_sparse_emb_to_one(response.sparse),
                 bgeM3=_bge_m3_emb_to_one(response.bgeM3),
             )
         if isinstance(response, t.ParsedEmbedResponseDenseSparse):
             return t.ParsedEmbedOneDenseSparse(
+                **common_kwargs,
                 dense=_dense_emb_to_vector(response.dense),
                 sparse=_sparse_emb_to_one(response.sparse),
             )
         if isinstance(response, t.ParsedEmbedResponseDenseBGEM3):
             return t.ParsedEmbedOneDenseBGEM3(
+                **common_kwargs,
                 dense=_dense_emb_to_vector(response.dense),
                 bgeM3=_bge_m3_emb_to_one(response.bgeM3),
             )
         if isinstance(response, t.ParsedEmbedResponseSparseBGEM3):
             return t.ParsedEmbedOneSparseBGEM3(
+                **common_kwargs,
                 sparse=_sparse_emb_to_one(response.sparse),
                 bgeM3=_bge_m3_emb_to_one(response.bgeM3),
             )
         if isinstance(response, t.ParsedEmbedResponseDense):
-            return t.ParsedEmbedOneDense(dense=_dense_emb_to_vector(response.dense))
+            return t.ParsedEmbedOneDense(
+                **common_kwargs, dense=_dense_emb_to_vector(response.dense)
+            )
         if isinstance(response, t.ParsedEmbedResponseSparse):
-            return t.ParsedEmbedOneSparse(sparse=_sparse_emb_to_one(response.sparse))
+            return t.ParsedEmbedOneSparse(
+                **common_kwargs, sparse=_sparse_emb_to_one(response.sparse)
+            )
         if isinstance(response, t.ParsedEmbedResponseBGEM3):
-            return t.ParsedEmbedOneBGEM3(bgeM3=_bge_m3_emb_to_one(response.bgeM3))
+            return t.ParsedEmbedOneBGEM3(
+                **common_kwargs, bgeM3=_bge_m3_emb_to_one(response.bgeM3)
+            )
         raise AssertionError("Unreachable embed response variant.")
 
     def rerank(self, payload: t.RerankRequestDict) -> t.ParsedRerankResponse:

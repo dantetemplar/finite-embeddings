@@ -19,7 +19,11 @@ with tempfile.TemporaryDirectory() as tmp:
             "dense_model_id": "sergeyzh/BERTA",
             "sparse_model_id": "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
         }
-        meow.embed(payload)  # fills LMDB on miss
-        meow.embed(payload)  # reads from LMDB
+        first = meow.embed(payload)  # fills LMDB on miss
+        print("======== cache miss ========")
+        print(first.pretty_timings())
+        second = meow.embed(payload)  # reads from LMDB
+        print("======== cache hit ========")
+        print(second.pretty_timings())
     finally:
         cache.close()

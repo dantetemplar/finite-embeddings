@@ -136,6 +136,8 @@ def test_embed_dense_sync_types() -> None:
     r = meow.embed(payload, use_cache=False)
     assert_type(r, ParsedEmbedResponseDense)
     assert r.dense.vectors.shape == (1, 2)
+    assert r.server_timings is None
+    assert isinstance(r.client_timings, dict)
 
     with pytest.raises(AttributeError):
         _ = r.sparse  # E: "ParsedEmbedResponseDense" has no attribute "sparse"
@@ -231,6 +233,8 @@ def test_embed_one_dense_sync_types() -> None:
     r = meow.embed_one(payload, use_cache=False)
     assert_type(r, ParsedEmbedOneDense)
     assert r.dense.vector.shape == (2,)
+    assert r.server_timings is None
+    assert isinstance(r.client_timings, dict)
 
     with pytest.raises(AttributeError):
         _ = r.sparse  # E: "ParsedEmbedOneDense" has no attribute "sparse"

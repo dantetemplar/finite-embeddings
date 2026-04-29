@@ -494,7 +494,13 @@ class EmbedCache:
                     to_store.append((slot.keys[idx], blob))
             self._save(to_store)
 
-    def finalize(self, progress: EmbedCacheProgress) -> ParsedEmbedResponseVariant:
+    def finalize(
+        self,
+        progress: EmbedCacheProgress,
+        *,
+        server_timings: dict[str, float] | None = None,
+        client_timings: dict[str, float] | None = None,
+    ) -> ParsedEmbedResponseVariant:
         dense_em: DenseEmbeddings | None = None
         sparse_em: SparseEmbeddings | None = None
         bge_dense_vec: Float32Array | None = None
@@ -549,4 +555,6 @@ class EmbedCache:
             dense=dense_em,
             sparse=sparse_em,
             bge_m3=bge_em,
+            server_timings=server_timings,
+            client_timings={} if client_timings is None else client_timings,
         )

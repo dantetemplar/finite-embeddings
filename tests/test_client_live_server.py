@@ -18,6 +18,19 @@ from meow_embed.types import (
 )
 
 
+def _assert_embed_timings_present(
+    *,
+    server_timings: dict[str, float] | None,
+    client_timings: dict[str, float],
+    total_key: str,
+) -> None:
+    assert isinstance(client_timings, dict)
+    assert total_key in client_timings
+    assert "remote_request_ms" in client_timings or "cache_prepare_ms" in client_timings
+    if server_timings is not None:
+        assert isinstance(server_timings, dict)
+
+
 @pytest.mark.anyio
 async def test_client_models_and_embed_live_server() -> None:
     base_url = os.getenv("MEOW_EMBED_BASE_URL", "http://127.0.0.1:8067")
@@ -55,6 +68,11 @@ async def test_client_models_and_embed_live_server() -> None:
         assert result.sparse.model_id == sparse_model_id
         assert len(result.sparse.items) == 2
         assert result.sparse.items[0].indices.size == result.sparse.items[0].values.size
+        _assert_embed_timings_present(
+            server_timings=result.server_timings,
+            client_timings=result.client_timings,
+            total_key="aembed_total_ms",
+        )
 
 
 @pytest.mark.anyio
@@ -83,6 +101,11 @@ async def test_client_aembed_one_live_server() -> None:
         assert isinstance(one, ParsedEmbedOneDenseSparse)
         assert one.dense.vector.ndim == 1
         assert one.sparse.item.indices.size == one.sparse.item.values.size
+        _assert_embed_timings_present(
+            server_timings=one.server_timings,
+            client_timings=one.client_timings,
+            total_key="aembed_total_ms",
+        )
 
 
 @pytest.mark.anyio
@@ -129,6 +152,12 @@ async def test_client_embed_cache_hit_skips_remote(
                 assert first_item.dim == second_item.dim
                 assert np.array_equal(first_item.indices, second_item.indices)
                 assert np.array_equal(first_item.values, second_item.values)
+            assert second.server_timings is None
+            _assert_embed_timings_present(
+                server_timings=second.server_timings,
+                client_timings=second.client_timings,
+                total_key="aembed_total_ms",
+            )
     finally:
         cache.close()
 
@@ -332,6 +361,11 @@ async def test_client_models_and_embed_sync_live_server() -> None:
             assert (
                 result.sparse.items[0].indices.size
                 == result.sparse.items[0].values.size
+            )
+            _assert_embed_timings_present(
+                server_timings=result.server_timings,
+                client_timings=result.client_timings,
+                total_key="embed_total_ms",
             )
 
 

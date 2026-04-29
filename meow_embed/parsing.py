@@ -112,29 +112,63 @@ def _pick_variant(
     dense: DenseEmbeddings | None,
     sparse: SparseEmbeddings | None,
     bge_m3: BGEM3Embeddings | None,
+    server_timings: dict[str, float] | None,
+    client_timings: dict[str, float],
 ) -> ParsedEmbedResponseVariant:
     if dense is not None and sparse is not None and bge_m3 is not None:
         return ParsedEmbedResponseDenseSparseBGEM3(
-            texts_count=texts_count, dense=dense, sparse=sparse, bgeM3=bge_m3
+            texts_count=texts_count,
+            server_timings=server_timings,
+            client_timings=client_timings,
+            dense=dense,
+            sparse=sparse,
+            bgeM3=bge_m3,
         )
     if dense is not None and sparse is not None:
         return ParsedEmbedResponseDenseSparse(
-            texts_count=texts_count, dense=dense, sparse=sparse
+            texts_count=texts_count,
+            server_timings=server_timings,
+            client_timings=client_timings,
+            dense=dense,
+            sparse=sparse,
         )
     if dense is not None and bge_m3 is not None:
         return ParsedEmbedResponseDenseBGEM3(
-            texts_count=texts_count, dense=dense, bgeM3=bge_m3
+            texts_count=texts_count,
+            server_timings=server_timings,
+            client_timings=client_timings,
+            dense=dense,
+            bgeM3=bge_m3,
         )
     if sparse is not None and bge_m3 is not None:
         return ParsedEmbedResponseSparseBGEM3(
-            texts_count=texts_count, sparse=sparse, bgeM3=bge_m3
+            texts_count=texts_count,
+            server_timings=server_timings,
+            client_timings=client_timings,
+            sparse=sparse,
+            bgeM3=bge_m3,
         )
     if dense is not None:
-        return ParsedEmbedResponseDense(texts_count=texts_count, dense=dense)
+        return ParsedEmbedResponseDense(
+            texts_count=texts_count,
+            server_timings=server_timings,
+            client_timings=client_timings,
+            dense=dense,
+        )
     if sparse is not None:
-        return ParsedEmbedResponseSparse(texts_count=texts_count, sparse=sparse)
+        return ParsedEmbedResponseSparse(
+            texts_count=texts_count,
+            server_timings=server_timings,
+            client_timings=client_timings,
+            sparse=sparse,
+        )
     if bge_m3 is not None:
-        return ParsedEmbedResponseBGEM3(texts_count=texts_count, bgeM3=bge_m3)
+        return ParsedEmbedResponseBGEM3(
+            texts_count=texts_count,
+            server_timings=server_timings,
+            client_timings=client_timings,
+            bgeM3=bge_m3,
+        )
     raise ValueError("At least one of dense, sparse, or bgeM3 must be returned.")
 
 
@@ -144,14 +178,25 @@ def assemble_parsed_response(
     dense: DenseEmbeddings | None = None,
     sparse: SparseEmbeddings | None = None,
     bge_m3: BGEM3Embeddings | None = None,
+    server_timings: dict[str, float] | None = None,
+    client_timings: dict[str, float] | None = None,
 ) -> ParsedEmbedResponseVariant:
     return _pick_variant(
-        texts_count=texts_count, dense=dense, sparse=sparse, bge_m3=bge_m3
+        texts_count=texts_count,
+        dense=dense,
+        sparse=sparse,
+        bge_m3=bge_m3,
+        server_timings=server_timings,
+        client_timings={} if client_timings is None else client_timings,
     )
 
 
 def decode_embed_response(
-    raw: EmbedResponseDict, payload: EmbedRequestPayload
+    raw: EmbedResponseDict,
+    payload: EmbedRequestPayload,
+    *,
+    server_timings: dict[str, float] | None = None,
+    client_timings: dict[str, float] | None = None,
 ) -> ParsedEmbedResponseVariant:
     texts_len = len(payload.get("texts", []))
     texts_count = raw["texts_count"]
@@ -186,5 +231,10 @@ def decode_embed_response(
             raise ValueError("BGE-M3 remote embed failed: mismatch in texts count.")
 
     return _pick_variant(
-        texts_count=texts_count, dense=dense, sparse=sparse, bge_m3=bge_m3
+        texts_count=texts_count,
+        dense=dense,
+        sparse=sparse,
+        bge_m3=bge_m3,
+        server_timings=server_timings,
+        client_timings={} if client_timings is None else client_timings,
     )

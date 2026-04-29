@@ -43,6 +43,7 @@ result = meow.embed(
 )  # NOTE: async version is await meow.aembed(...)
 print("======== embed ========")
 print(f"texts_count: {result.texts_count}")
+print(result.pretty_timings())
 
 print("dense")
 print(f"    .model_id: {result.dense.model_id}")
@@ -91,6 +92,7 @@ one = meow.embed_one(
 )  # NOTE: async version is await meow.aembed_one(...)
 assert one.dense.vector.shape == (768,)
 print("======== embed one ========")
+print(one.pretty_timings())
 print("dense")
 print(f"    .model_id: {one.dense.model_id}")
 print(f"    .vectors: {numpy_info(one.dense.vector)}")
