@@ -38,11 +38,15 @@ meow-embed = "meow_embed.cli:main"
 
 [dependency-groups]
 dev = [
+    "ir-datasets>=0.5.11",
     "mypy>=1.20.0",
     "mypy-test>=0.1.4",
     "pyright>=1.1.408",
     "pytest>=8.4.2",
 ]
+
+[tool.uv]
+constraint-dependencies = ["urllib3>=2.7.0"]
 
 [build-system]
 requires = ["hatchling"]
